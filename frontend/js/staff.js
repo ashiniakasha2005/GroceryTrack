@@ -35,3 +35,19 @@ staffMembers.forEach(function (staff) {
 
     staffTableBody.appendChild(row);
 });
+
+
+const deactivateButtons = document.querySelectorAll(".deactivate-btn");
+
+deactivateButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+        const confirmed = confirm("Are you sure you want to deactivate this staff account?");
+
+        if (confirmed) {
+    const row = button.closest("tr");
+    const statusCell = row.querySelector("td:nth-child(5)");
+
+    statusCell.textContent = "Inactive";
+}
+    });
+});
