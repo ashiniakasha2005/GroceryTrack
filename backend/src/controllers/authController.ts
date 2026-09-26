@@ -1,17 +1,17 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { findUserByEmail } from '../models/userModel';
+import { findUserByIdentifier } from '../models/userModel';
 
 export async function login(req: Request, res: Response) {
   try {
-    const { email, password } = req.body;
+    const { identifier, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password required' });
-    }
+    if (!identifier || !password) {
+  return res.status(400).json({ message: 'Email/username and password required' });
+}
 
-    const user = await findUserByEmail(email);
+    const user = await findUserByIdentifier(identifier);
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
