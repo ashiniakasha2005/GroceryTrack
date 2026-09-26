@@ -4,6 +4,7 @@ function AppShell() {
   const navigate = useNavigate()
 
   const handleLogout = () => {
+    localStorage.removeItem('isLoggedIn')
     navigate('/login')
   }
 
@@ -29,6 +30,10 @@ function AppShell() {
           <nav className="nav flex-column gap-2">
             <NavLink className="nav-link" to="/dashboard">
               Dashboard
+            </NavLink>
+
+            <NavLink className="nav-link" to="/staff">
+              Staff Management
             </NavLink>
           </nav>
         </aside>
