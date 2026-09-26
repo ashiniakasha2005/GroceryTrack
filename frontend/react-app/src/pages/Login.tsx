@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import groceryTrackLogo from "../assets/grocerytrack-logo3.jpeg";
 function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -28,53 +29,68 @@ function Login() {
       return;
     }
     try {
-    const response = await fetch("http://localhost:5000/api/auth/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        identifier: email,
-        password: password,
-      }),
-    });
+      const response = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          identifier: email,
+          password: password,
+        }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      setLoginError(data.message || "Login failed");
-      return;
-    }
+      if (!response.ok) {
+        setLoginError(data.message || "Login failed");
+        return;
+      }
 
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
 
-   if (data.user.role === "Admin" || data.user.role === "Staff") {
-  navigate("/dashboard");
-}
+      if (data.user.role === "Admin" || data.user.role === "Staff") {
+        navigate("/dashboard");
+      }
 
     } catch (error) {
-  setLoginError("Unable to connect to the server. Please try again.");
-  console.error("Login error:", error);
-}
+      setLoginError("Unable to connect to the server. Please try again.");
+      console.error("Login error:", error);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#f0f2f5] flex items-center justify-center font-sans">
+  <div className="w-full max-w-[380px]">
 
-      <div className="w-full max-w-[420px] bg-white rounded-[10px] px-[22px] py-5 shadow-[0_2px_12px_rgba(0,0,0,0.07)]">
+   
+    <div className="flex flex-col items-center mb-3">
+      <img
+        src={groceryTrackLogo}
+        alt="GroceryTrack Logo"
+        className="w-[56px] h-[56px] rounded-[10px] object-cover shadow-md mb-3"
+      />
 
+     <h1 className="text-[20px] font-extrabold text-[#212529] tracking-[-0.3px]">
+        GroceryTrack
+      </h1>
 
-        <div className="flex justify-center mb-5">
-          <div className="w-[72px] h-[72px] rounded-full bg-[#0d6efd] text-white flex items-center justify-center shadow-[0_4px_20px_rgba(13,110,253,0.35)]">
-            Logo
-          </div>
-        </div>
+      <p className="text-[11px] text-[#8a8f98] mt-1">
+        Store Management System
+      </p>
+    </div>
 
+    
+    <div className="bg-white rounded-[10px] px-[22px] py-5 shadow-[0_2px_12px_rgba(0,0,0,0.07)]">
 
-        <h1 className="text-[18px] font-bold text-[#212529] text-center mb-6">
-          GroceryTrack
-        </h1>
+      <h2 className="text-[16px] font-semibold text-[#212529] mb-1">
+        Sign in to your account
+      </h2>
+
+      <p className="text-[12px] text-gray-400 mb-5">
+        Enter your credentials to continue
+      </p>
 
         <form
           onSubmit={handleSubmit}
@@ -157,9 +173,13 @@ function Login() {
           </button>
 
         </form>
-      </div>
-    </div>
-  );
+
+</div>
+
+</div>
+
+</div>
+);
 }
 
 export default Login;
