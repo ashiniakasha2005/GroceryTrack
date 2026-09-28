@@ -8,6 +8,7 @@ export type StaffMember = {
   fullName: string;
   username: string;
   email: string;
+  role?: string;
   status?: StaffStatus;
 };
 
@@ -31,7 +32,7 @@ type StaffFormProps = {
   onSubmit: (
     values: Omit<FormValues, "password"> & {
       password?: string;
-      role: "Staff";
+      role?: "Staff";
       id?: string;
     }
   ) => Promise<void> | void;
@@ -51,13 +52,20 @@ function getInitialValues(
   if (mode === "edit" && staff) {
     return {
       fullName: staff.fullName,
-      username: staff.username,
+      username: staff.username.replace(/^@/, ""),
       email: staff.email,
       password: "",
     };
   }
 
   return { ...emptyValues };
+}
+
+function normalizeUsername(value: string) {
+  return value.trim().replace(/^@/, "").toLowerCase();
+}
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
 }
 
 function validate(
@@ -81,17 +89,15 @@ function validate(
   if (!username) {
     errors.username = "Username is required.";
   } else if (
-    !/^(?=.{4,20}$)[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*$/.test(
-      username
-    )
+    !/^(?=.{4,20}$)[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/.test(username)
   ) {
     errors.username =
-      "Username must be 4–20 characters and start with a letter.";
+      "Username must be 4–20 characters (letters, numbers, . _ - only).";
   }
 
   // Email validation
   const emailRegex =
-    /^[^\s@]+@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+   /^[^\s@]+@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
 
   if (!email) {
     errors.email = "Email address is required.";
@@ -105,8 +111,7 @@ function validate(
   if (mode === "add" && !values.password) {
     errors.password = "Password is required.";
   } else if (
-    values.password &&
-    !/^(?=.*\d).{8,}$/.test(values.password)
+    values.password && !/^(?=.*\d).{8,}$/.test(values.password)
   ) {
     errors.password =
       "Password must be at least 8 characters and contain a number.";
@@ -137,11 +142,11 @@ export function StaffForm({
   const [showPassword, setShowPassword] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
   const [formError, setFormError] = useState("");
-
   const titleId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-
+  const submittingRef = useRef(false);
+ 
   useEffect(() => {
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
 
@@ -149,8 +154,12 @@ export function StaffForm({
     const focusable = dialogNode?.querySelectorAll<HTMLElement>(
       'button, input, [href], select, textarea, [tabindex]:not([tabindex="-1"])'
     );
-    focusable?.[0]?.focus();
+    (
+      dialogNode?.querySelector<HTMLElement>("input:not([disabled])") ??
+      focusable?.[0]
 
+    )?.focus();
+    
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && !isSubmitting) {
         onClose();
@@ -161,6 +170,7 @@ export function StaffForm({
         const focusableEls = dialogNode.querySelectorAll<HTMLElement>(
           'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
         );
+
         if (focusableEls.length === 0) return;
 
         const first = focusableEls[0];
@@ -208,6 +218,42 @@ export function StaffForm({
   }
 }, []);
 
+function getDuplicateErrors(nextValues: FormValues): FormErrors {
+    const result: FormErrors = {};
+    const username = normalizeUsername(nextValues.username);
+    const email = normalizeEmail(nextValues.email);
+    const currentUsername = staff ? normalizeUsername(staff.username) : "";
+    const currentEmail = staff ? normalizeEmail(staff.email) : "";
+
+    if (
+      username &&
+      existingUsernames.some((item) => normalizeUsername(item) === username) &&
+      !(mode === "edit" && currentUsername === username)
+    ) {
+      result.username = "Username already in use";
+    }
+
+    if (
+      email &&
+      existingEmails.some((item) => normalizeEmail(item) === email) &&
+      !(mode === "edit" && currentEmail === email)
+    ) {
+      result.email = "Email already in use";
+    }
+
+    return result;
+}
+
+  function getAllErrors(nextValues: FormValues): FormErrors {
+    const formatErrors = validate(nextValues, mode);
+    const duplicateErrors = getDuplicateErrors(nextValues);
+
+    if (formatErrors.username) delete duplicateErrors.username;
+    if (formatErrors.email) delete duplicateErrors.email;
+
+    return { ...formatErrors, ...duplicateErrors };
+  }
+
   function updateField(field: keyof FormValues, value: string) {
     setFormError("");
     setSuccessMessage("");
@@ -220,59 +266,25 @@ export function StaffForm({
     setValues(nextValues);
 
     if (touched[field]) {
-      setErrors(validate(nextValues, mode));
+      setErrors(getAllErrors(nextValues));
     }
   }
 
   // Validate current form values on blur.
   // onChange updates values immediately, so no separate latestValue is needed.
   function handleBlur(field: keyof FormValues) {
-    const nextTouched = {
-      ...touched,
-      [field]: true,
-    };
-
-    setTouched(nextTouched);
-    setErrors(validate(values, mode));
+    setTouched((previous) => ({ ...previous, [field]: true }));
+    setErrors(getAllErrors(values));
   }
-
+  
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting || submittingRef.current) return;
+ 
     setFormError("");
-
-    const nextErrors = validate(values, mode);
-
-    const normalizedUsername = values.username.trim().toLowerCase();
-    const normalizedEmail = values.email.trim().toLowerCase();
-
-    // Check duplicate username.
-    // In edit mode, the current staff member's existing username is allowed.
-    const currentUsername = staff?.username.trim().toLowerCase();
-    const usernameIsDuplicate = existingUsernames.some(
-      (username) => username.trim().toLowerCase() === normalizedUsername
-    );
-
-    if (
-      usernameIsDuplicate &&
-      !(mode === "edit" && currentUsername === normalizedUsername)
-    ) {
-      nextErrors.username = "Username already in use.";
-    }
-
-    // Check duplicate email.
-    // In edit mode, the current staff member's existing email is allowed.
-    const currentEmail = staff?.email.trim().toLowerCase();
-    const emailIsDuplicate = existingEmails.some(
-      (email) => email.trim().toLowerCase() === normalizedEmail
-    );
-
-    if (
-      emailIsDuplicate &&
-      !(mode === "edit" && currentEmail === normalizedEmail)
-    ) {
-      nextErrors.email = "Email already in use.";
-    }
-
+    setSuccessMessage("");
+ 
+    const nextErrors = getAllErrors(values);
     setErrors(nextErrors);
 
     setTouched({
@@ -286,6 +298,8 @@ export function StaffForm({
       return;
     }
 
+    submittingRef.current = true;
+     
     try {
       const { password, ...rest } = values;
 
@@ -293,8 +307,10 @@ export function StaffForm({
         ...rest,
         fullName: rest.fullName.trim(),
         username: rest.username.trim(),
-        email: normalizedEmail,
-        role: "Staff" as const,
+        email: normalizeEmail(rest.email),
+        // New accounts are always "Staff". When editing, no role is sent,
+        // so the existing role (for example Cashier) is kept.
+        ...(mode === "add" ? { role: "Staff" as const } : {}),
         ...(mode === "edit" && staff ? { id: staff.id } : {}),
         ...(mode === "edit" && !password ? {} : { password }),
       };
@@ -310,8 +326,8 @@ export function StaffForm({
 
       setSuccessMessage(
         mode === "add"
-          ? "Staff account created."
-          : "Staff account updated."
+          ? "Staff account created successfully."
+          : "Staff account updated successfully."
       );
     } catch (err: unknown) {
       // Expects the backend integration to reject with a structured error,
@@ -336,9 +352,11 @@ export function StaffForm({
           apiError?.message ?? "Something went wrong. Please try again."
         );
       }
+    } finally {
+      submittingRef.current = false;
     }
   }
-
+    
   if (!canManageStaff) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#212529]/50 p-4">
@@ -733,6 +751,8 @@ function AlertIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
       <circle cx="12" cy="12" r="10" />
       <path d="M12 8v4M12 16h.01" />
