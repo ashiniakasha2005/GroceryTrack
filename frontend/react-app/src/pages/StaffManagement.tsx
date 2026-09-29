@@ -1,11 +1,12 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { StaffForm } from '../components/staffform'
 
 type Staff = {
   id: number
   name: string
   username: string
   email: string
-  role: 'Cashier' | 'Staff'
+  role: 'Staff'
   status: 'Active' | 'Inactive'
   dateJoined: string
   initials: string
@@ -13,13 +14,25 @@ type Staff = {
 
 type ActionType = 'deactivate' | 'activate' | 'delete' | null
 
+type FormState =
+  | {
+      mode: 'add'
+    }
+  | {
+      mode: 'edit'
+      staff: Staff
+    }
+  | null
+
+// Temporary frontend seed data used only when no saved staff data exists yet.
+// Once a backend is available, replace this seed with the GET /api/staff request.
 const initialStaff: Staff[] = [
   {
     id: 1,
     name: 'Juan dela Cruz',
     username: '@jdelacruz',
     email: 'juan.delacruz@grocerytrack.com',
-    role: 'Cashier',
+    role: 'Staff',
     status: 'Active',
     dateJoined: 'Jan 12, 2024',
     initials: 'JC',
@@ -39,7 +52,7 @@ const initialStaff: Staff[] = [
     name: 'Carlos Bautista',
     username: '@cbautista',
     email: 'carlos.bautista@grocerytrack.com',
-    role: 'Cashier',
+    role: 'Staff',
     status: 'Active',
     dateJoined: 'May 20, 2024',
     initials: 'CB',
@@ -59,7 +72,7 @@ const initialStaff: Staff[] = [
     name: 'Ramon Santos',
     username: '@rsantos',
     email: 'ramon.santos@grocerytrack.com',
-    role: 'Cashier',
+    role: 'Staff',
     status: 'Active',
     dateJoined: 'Aug 14, 2024',
     initials: 'RS',
@@ -85,12 +98,67 @@ const avatarColors = [
   '#d63384',
 ]
 
+function getInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
+function stripAt(username: string) {
+  return username.replace(/^@/, '').trim().toLowerCase()
+}
+
+function formatDateJoined(date: Date) {
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
 function StaffManagement() {
-  const [staff, setStaff] = useState<Staff[]>(initialStaff)
+  const [staff, setStaff] = useState<Staff[]>(() => {
+    try {
+      const savedStaff = localStorage.getItem('grocerytrack_staff')
+
+      if (savedStaff) {
+        const parsedStaff = JSON.parse(savedStaff) as Staff[]
+
+        if (Array.isArray(parsedStaff)) {
+          return parsedStaff.map((member) => ({
+            ...member,
+            role: 'Staff' as const,
+          }))
+        }
+      }
+    } catch (error) {
+      console.error('Could not load saved staff accounts:', error)
+    }
+
+    return initialStaff.map((member) => ({
+      ...member,
+      role: 'Staff' as const,
+    }))
+  })
+
   const [search, setSearch] = useState('')
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null)
   const [actionType, setActionType] = useState<ActionType>(null)
   const [toast, setToast] = useState<string | null>(null)
+
+  const [formState, setFormState] = useState<FormState>(null)
+  const [isSubmittingForm, setIsSubmittingForm] = useState(false)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('grocerytrack_staff', JSON.stringify(staff))
+    } catch (error) {
+      console.error('Could not save staff accounts:', error)
+    }
+  }, [staff])
 
   const activeCount = staff.filter(
     (member) => member.status === 'Active',
@@ -111,6 +179,20 @@ function StaffManagement() {
     )
   }, [search, staff])
 
+  /*
+   * These lists are passed to StaffForm so it can detect
+   * duplicate usernames and emails while adding/editing.
+   */
+  const existingUsernames = useMemo(
+    () => staff.map((member) => stripAt(member.username)),
+    [staff],
+  )
+
+  const existingEmails = useMemo(
+    () => staff.map((member) => member.email.toLowerCase()),
+    [staff],
+  )
+
   const showToast = (message: string) => {
     setToast(message)
 
@@ -118,6 +200,10 @@ function StaffManagement() {
       setToast(null)
     }, 3000)
   }
+
+  /* ---------------------------
+     Confirmation actions
+  ---------------------------- */
 
   const openConfirmation = (
     member: Staff,
@@ -183,44 +269,105 @@ function StaffManagement() {
     }
   }
 
-  const getModalTitle = () => {
-    if (actionType === 'delete') {
-      return 'Delete Staff Account'
-    }
+  /* ---------------------------
+     Add / Edit form actions
+  ---------------------------- */
 
-    if (actionType === 'deactivate') {
-      return 'Deactivate Staff Account'
-    }
-
-    return 'Activate Staff Account'
+  const openAddForm = () => {
+    setFormState({
+      mode: 'add',
+    })
   }
 
-  const getModalMessage = () => {
-    if (!selectedStaff) {
-      return ''
-    }
-
-    if (actionType === 'delete') {
-      return `Are you sure you want to delete ${selectedStaff.name}'s account? This action cannot be undone.`
-    }
-
-    if (actionType === 'deactivate') {
-      return `Are you sure you want to deactivate ${selectedStaff.name}'s account? They will no longer be able to access the system.`
-    }
-
-    return `Are you sure you want to activate ${selectedStaff.name}'s account?`
+  const openEditForm = (member: Staff) => {
+    setFormState({
+      mode: 'edit',
+      staff: member,
+    })
   }
 
-  const getConfirmButtonStyle = (): CSSProperties => {
-    if (actionType === 'activate') {
-      return {
-        ...primaryButtonStyle,
-        backgroundColor: '#198754',
+  const closeForm = () => {
+    if (isSubmittingForm) {
+      return
+    }
+
+    setFormState(null)
+  }
+
+  /*
+   * StaffForm sends:
+   * fullName
+   * username
+   * email
+   * role
+   * id
+   * password
+   *
+   * We convert that data into your existing Staff structure.
+   */
+  const handleStaffFormSubmit = async (values: any) => {
+    setIsSubmittingForm(true)
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      if (formState?.mode === 'edit') {
+        setStaff((currentStaff) =>
+          currentStaff.map((member) =>
+            String(member.id) === String(values.id)
+              ? {
+                  ...member,
+                  name: values.fullName.trim(),
+                  username: `@${stripAt(values.username)}`,
+                  email: values.email.trim().toLowerCase(),
+                  role: 'Staff',
+                  initials: getInitials(values.fullName),
+                }
+              : member,
+          ),
+        )
+
+        showToast('Staff account updated successfully.')
+      } else {
+        const newStaff: Staff = {
+          id:
+            Math.max(
+              0,
+              ...staff.map((member) => member.id),
+            ) + 1,
+
+          name: values.fullName.trim(),
+
+          username: `@${stripAt(values.username)}`,
+
+          email: values.email.trim().toLowerCase(),
+
+          role: 'Staff',
+
+          status: 'Active',
+
+          dateJoined: formatDateJoined(new Date()),
+
+          initials: getInitials(values.fullName),
+        }
+
+        setStaff((currentStaff) => [
+          ...currentStaff,
+          newStaff,
+        ])
+
+        showToast('Staff account created successfully.')
       }
-    }
 
-    return dangerButtonStyle
+      setFormState(null)
+    } finally {
+      setIsSubmittingForm(false)
+    }
   }
+
+  /* ---------------------------
+     Icons
+  ---------------------------- */
 
   const renderSearchIcon = () => (
     <svg
@@ -269,7 +416,9 @@ function StaffManagement() {
     />
   )
 
-  const renderAccountActionIcon = (status: Staff['status']) => (
+  const renderAccountActionIcon = (
+    status: Staff['status'],
+  ) => (
     <svg
       width="15"
       height="15"
@@ -282,12 +431,24 @@ function StaffManagement() {
     >
       {status === 'Active' ? (
         <>
-          <rect x="5" y="10" width="14" height="10" rx="2" />
+          <rect
+            x="5"
+            y="10"
+            width="14"
+            height="10"
+            rx="2"
+          />
           <path d="M8 10V7a4 4 0 0 1 8 0v3" />
         </>
       ) : (
         <>
-          <rect x="5" y="10" width="14" height="10" rx="2" />
+          <rect
+            x="5"
+            y="10"
+            width="14"
+            height="10"
+            rx="2"
+          />
           <path d="M8 10V7a4 4 0 0 1 8-1.5" />
         </>
       )}
@@ -324,6 +485,49 @@ function StaffManagement() {
       <path d="m8 12 2.5 2.5L16.5 9" />
     </svg>
   )
+
+  /* ---------------------------
+     Modal text
+  ---------------------------- */
+
+  const getModalTitle = () => {
+    if (actionType === 'delete') {
+      return 'Delete Staff Account'
+    }
+
+    if (actionType === 'deactivate') {
+      return 'Deactivate Staff Account'
+    }
+
+    return 'Activate Staff Account'
+  }
+
+  const getModalMessage = () => {
+    if (!selectedStaff) {
+      return ''
+    }
+
+    if (actionType === 'delete') {
+      return `Are you sure you want to delete ${selectedStaff.name}'s account? This action cannot be undone.`
+    }
+
+    if (actionType === 'deactivate') {
+      return `Are you sure you want to deactivate ${selectedStaff.name}'s account? They will no longer be able to access the system.`
+    }
+
+    return `Are you sure you want to activate ${selectedStaff.name}'s account?`
+  }
+
+  const getConfirmButtonStyle = (): CSSProperties => {
+    if (actionType === 'activate') {
+      return {
+        ...primaryButtonStyle,
+        backgroundColor: '#198754',
+      }
+    }
+
+    return dangerButtonStyle
+  }
 
   return (
     <>
@@ -368,16 +572,20 @@ function StaffManagement() {
               }}
             >
               {staff.length} total accounts
-              <span style={{ margin: '0 5px' }}>•</span>
+              <span style={{ margin: '0 5px' }}>
+                •
+              </span>
+
               <span style={{ color: '#198754' }}>
                 {activeCount} active
               </span>
             </div>
           </div>
 
-          {/* Visual only - Add Staff belongs to another FE task */}
+          {/* Add New Staff */}
           <button
             type="button"
+            onClick={openAddForm}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -391,7 +599,7 @@ function StaffManagement() {
               color: '#fff',
               fontSize: '12px',
               fontWeight: 600,
-              cursor: 'default',
+              cursor: 'pointer',
             }}
           >
             {renderPlusIcon()}
@@ -504,9 +712,13 @@ function StaffManagement() {
                     Username / Email
                   </th>
 
-                  <th style={tableHeaderStyle}>Role</th>
+                  <th style={tableHeaderStyle}>
+                    Role
+                  </th>
 
-                  <th style={tableHeaderStyle}>Status</th>
+                  <th style={tableHeaderStyle}>
+                    Status
+                  </th>
 
                   <th style={tableHeaderStyle}>
                     Date Joined
@@ -603,14 +815,8 @@ function StaffManagement() {
                           alignItems: 'center',
                           padding: '4px 8px',
                           borderRadius: '4px',
-                          backgroundColor:
-                            member.role === 'Cashier'
-                              ? '#cfe2ff'
-                              : '#e9ecef',
-                          color:
-                            member.role === 'Cashier'
-                              ? '#084298'
-                              : '#495057',
+                          backgroundColor: '#e9ecef',
+                          color: '#495057',
                           fontSize: '10px',
                           fontWeight: 600,
                         }}
@@ -682,17 +888,20 @@ function StaffManagement() {
                           gap: '5px',
                         }}
                       >
-                        {/* Edit - visual only */}
+                        {/* Edit */}
                         <button
                           type="button"
                           title="Edit"
                           aria-label={`Edit ${member.name}`}
+                          onClick={() =>
+                            openEditForm(member)
+                          }
                           style={actionButtonStyle}
                         >
                           {renderEditIcon()}
                         </button>
 
-                        {/* Deactivate / Activate - working */}
+                        {/* Deactivate / Activate */}
                         <button
                           type="button"
                           title={
@@ -721,16 +930,21 @@ function StaffManagement() {
                                 : '#198754',
                           }}
                         >
-                          {renderAccountActionIcon(member.status)}
+                          {renderAccountActionIcon(
+                            member.status,
+                          )}
                         </button>
 
-                        {/* Delete - working */}
+                        {/* Delete */}
                         <button
                           type="button"
                           title="Delete"
                           aria-label={`Delete ${member.name}`}
                           onClick={() =>
-                            openConfirmation(member, 'delete')
+                            openConfirmation(
+                              member,
+                              'delete',
+                            )
                           }
                           style={actionButtonStyle}
                         >
@@ -774,6 +988,35 @@ function StaffManagement() {
           </div>
         </div>
       </div>
+
+      {/* Add / Edit Staff Form */}
+      {formState && (
+        <StaffForm
+          mode={formState.mode}
+          staff={
+            formState.mode === 'edit'
+              ? {
+                  id: String(formState.staff.id),
+                  fullName: formState.staff.name,
+                  username: stripAt(
+                    formState.staff.username,
+                  ),
+                  email: formState.staff.email,
+                  status:
+                    formState.staff.status === 'Active'
+                      ? 'active'
+                      : 'inactive',
+                }
+              : undefined
+          }
+          isSubmitting={isSubmittingForm}
+          canManageStaff={true}
+          existingUsernames={existingUsernames}
+          existingEmails={existingEmails}
+          onClose={closeForm}
+          onSubmit={handleStaffFormSubmit}
+        />
+      )}
 
       {/* Confirmation Modal */}
       {selectedStaff && actionType && (
@@ -880,6 +1123,10 @@ function StaffManagement() {
     </>
   )
 }
+
+/* ---------------------------
+   Styles
+---------------------------- */
 
 const tableHeaderStyle: CSSProperties = {
   padding: '11px 16px',
