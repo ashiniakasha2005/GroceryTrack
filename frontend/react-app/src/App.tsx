@@ -5,6 +5,12 @@ import StaffManagement from './pages/StaffManagement'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 
+function ProtectedRoute() {
+  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
+
+  return isLoggedIn ? <AppShell /> : <Navigate to="/login" replace />
+}
+
 function App() {
   return (
     <Routes>
@@ -12,7 +18,7 @@ function App() {
 
       <Route path="/login" element={<Login />} />
 
-      <Route element={<AppShell />}>
+      <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/staff" element={<StaffManagement />} />
       </Route>
