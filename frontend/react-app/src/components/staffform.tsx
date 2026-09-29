@@ -149,6 +149,7 @@ export function StaffForm({
     const focusable = dialogNode?.querySelectorAll<HTMLElement>(
       'button, input, [href], select, textarea, [tabindex]:not([tabindex="-1"])'
     );
+
     focusable?.[0]?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -161,6 +162,7 @@ export function StaffForm({
         const focusableEls = dialogNode.querySelectorAll<HTMLElement>(
           'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
         );
+
         if (focusableEls.length === 0) return;
 
         const first = focusableEls[0];
@@ -195,18 +197,18 @@ export function StaffForm({
   }, [mode, staff?.id, staff?.fullName, staff?.username, staff?.email]);
 
   useEffect(() => {
-  const fontId = "staff-form-inter-font";
+    const fontId = "staff-form-inter-font";
 
-  if (!document.getElementById(fontId)) {
-    const link = document.createElement("link");
-    link.id = fontId;
-    link.rel = "stylesheet";
-    link.href =
-      "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap";
+    if (!document.getElementById(fontId)) {
+      const link = document.createElement("link");
+      link.id = fontId;
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap";
 
-    document.head.appendChild(link);
-  }
-}, []);
+      document.head.appendChild(link);
+    }
+  }, []);
 
   function updateField(field: keyof FormValues, value: string) {
     setFormError("");
@@ -224,8 +226,6 @@ export function StaffForm({
     }
   }
 
-  // Validate current form values on blur.
-  // onChange updates values immediately, so no separate latestValue is needed.
   function handleBlur(field: keyof FormValues) {
     const nextTouched = {
       ...touched,
@@ -245,31 +245,50 @@ export function StaffForm({
     const normalizedUsername = values.username.trim().toLowerCase();
     const normalizedEmail = values.email.trim().toLowerCase();
 
-    // Check duplicate username.
-    // In edit mode, the current staff member's existing username is allowed.
-    const currentUsername = staff?.username.trim().toLowerCase();
-    const usernameIsDuplicate = existingUsernames.some(
-      (username) => username.trim().toLowerCase() === normalizedUsername
+    /*
+     * Duplicate username validation
+     *
+     * Count how many existing staff accounts use this username.
+     * If the count is greater than 1, it is definitely duplicated.
+     *
+     * In edit mode, if the count is exactly 1 and it belongs to the
+     * current staff member, keeping the same username is allowed.
+     */
+    const matchingUsernames = existingUsernames.filter(
+      (username) =>
+        username.trim().toLowerCase() === normalizedUsername
     );
 
-    if (
-      usernameIsDuplicate &&
-      !(mode === "edit" && currentUsername === normalizedUsername)
-    ) {
+    const usernameIsDuplicate =
+      matchingUsernames.length > 1 ||
+      (matchingUsernames.length === 1 &&
+        !(mode === "edit" &&
+          staff?.username.trim().toLowerCase() === normalizedUsername));
+
+    if (usernameIsDuplicate) {
       nextErrors.username = "Username already in use.";
     }
 
-    // Check duplicate email.
-    // In edit mode, the current staff member's existing email is allowed.
-    const currentEmail = staff?.email.trim().toLowerCase();
-    const emailIsDuplicate = existingEmails.some(
+    /*
+     * Duplicate email validation
+     *
+     * Count how many existing staff accounts use this email.
+     * If the count is greater than 1, it is definitely duplicated.
+     *
+     * In edit mode, if the count is exactly 1 and it belongs to the
+     * current staff member, keeping the same email is allowed.
+     */
+    const matchingEmails = existingEmails.filter(
       (email) => email.trim().toLowerCase() === normalizedEmail
     );
 
-    if (
-      emailIsDuplicate &&
-      !(mode === "edit" && currentEmail === normalizedEmail)
-    ) {
+    const emailIsDuplicate =
+      matchingEmails.length > 1 ||
+      (matchingEmails.length === 1 &&
+        !(mode === "edit" &&
+          staff?.email.trim().toLowerCase() === normalizedEmail));
+
+    if (emailIsDuplicate) {
       nextErrors.email = "Email already in use.";
     }
 
@@ -304,6 +323,7 @@ export function StaffForm({
       if (mode === "add") {
         setValues({ ...emptyValues });
       }
+
       setErrors({});
       setTouched({});
       setShowPassword(false);
@@ -314,19 +334,21 @@ export function StaffForm({
           : "Staff account updated."
       );
     } catch (err: unknown) {
-      // Expects the backend integration to reject with a structured error,
-      // e.g. { field: "username" | "email", message: string } for 409s.
       const apiError =
         typeof err === "object" && err !== null
           ? (err as { field?: string; message?: string })
           : undefined;
 
-      if (apiError?.field === "username" || apiError?.field === "email") {
+      if (
+        apiError?.field === "username" ||
+        apiError?.field === "email"
+      ) {
         setErrors((prev) => ({
           ...prev,
           [apiError.field as "username" | "email"]:
             apiError.message ?? "This value is already in use.",
         }));
+
         setTouched((prev) => ({
           ...prev,
           [apiError.field as "username" | "email"]: true,
@@ -376,10 +398,13 @@ export function StaffForm({
 
   return (
     <div
-       className="fixed inset-0 z-50 flex items-center justify-center bg-[#212529]/50 p-4 font-['Inter']"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#212529]/50 p-4 font-['Inter']"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !isSubmitting) {
+        if (
+          event.target === event.currentTarget &&
+          !isSubmitting
+        ) {
           onClose();
         }
       }}
@@ -426,7 +451,9 @@ export function StaffForm({
         <form
           onSubmit={handleSubmit}
           noValidate
-          aria-describedby={formError ? `${titleId}-form-error` : undefined}
+          aria-describedby={
+            formError ? `${titleId}-form-error` : undefined
+          }
           className="flex flex-1 flex-col"
         >
           <div className="flex-1 space-y-4 px-6 py-[22px]">
@@ -459,10 +486,14 @@ export function StaffForm({
               disabled={isSubmitting}
               value={values.fullName}
               placeholder="e.g. Juan dela Cruz"
-              error={touched.fullName ? errors.fullName : undefined}
+              error={
+                touched.fullName ? errors.fullName : undefined
+              }
               errorId={errorId("fullName")}
               inputClassName={fieldClass("fullName")}
-              onChange={(value) => updateField("fullName", value)}
+              onChange={(value) =>
+                updateField("fullName", value)
+              }
               onBlur={() => handleBlur("fullName")}
             />
 
@@ -476,10 +507,14 @@ export function StaffForm({
                 disabled={isSubmitting}
                 value={values.username}
                 placeholder="e.g. j.delacruz"
-                error={touched.username ? errors.username : undefined}
+                error={
+                  touched.username ? errors.username : undefined
+                }
                 errorId={errorId("username")}
                 inputClassName={fieldClass("username")}
-                onChange={(value) => updateField("username", value)}
+                onChange={(value) =>
+                  updateField("username", value)
+                }
                 onBlur={() => handleBlur("username")}
               />
 
@@ -497,7 +532,7 @@ export function StaffForm({
                   value="Staff"
                   readOnly
                   disabled
-                  className="h-[38px] w-full cursor-not-allowed rounded-[6px] border border-[#dee2e6] bg-[#f8f9fa] px-3 text-[13px] font-['Inter'] leading-none text-[#343a40] opacity-100"         
+                  className="h-[38px] w-full cursor-not-allowed rounded-[6px] border border-[#dee2e6] bg-[#f8f9fa] px-3 text-[13px] font-['Inter'] leading-none text-[#343a40] opacity-100"
                 />
               </div>
             </div>
@@ -512,10 +547,14 @@ export function StaffForm({
               type="email"
               value={values.email}
               placeholder="e.g. juan.delacruz@grocerytrack.com"
-              error={touched.email ? errors.email : undefined}
+              error={
+                touched.email ? errors.email : undefined
+              }
               errorId={errorId("email")}
               inputClassName={fieldClass("email")}
-              onChange={(value) => updateField("email", value)}
+              onChange={(value) =>
+                updateField("email", value)
+              }
               onBlur={() => handleBlur("email")}
             />
 
@@ -562,13 +601,17 @@ export function StaffForm({
 
                 <button
                   type="button"
-                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseDown={(event) =>
+                    event.preventDefault()
+                  }
                   onClick={() =>
                     setShowPassword((visible) => !visible)
                   }
                   disabled={isSubmitting}
                   aria-label={
-                    showPassword ? "Hide password" : "Show password"
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
                   }
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[#adb5bd] transition hover:text-[#495057] disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -600,12 +643,12 @@ export function StaffForm({
               Cancel
             </button>
 
-           <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex h-[37.1px] w-[131px] shrink-0 items-center justify-center whitespace-nowrap rounded-[6px] bg-[#0d6efd] px-[22px] py-0 text-center font-['Inter'] text-[13px] font-semibold leading-[19.5px] tracking-[0px] text-white transition hover:bg-[#0b5ed7] disabled:cursor-not-allowed disabled:opacity-60"
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="inline-flex h-[37.1px] w-[131px] shrink-0 items-center justify-center whitespace-nowrap rounded-[6px] bg-[#0d6efd] px-[22px] py-0 text-center font-['Inter'] text-[13px] font-semibold leading-[19.5px] tracking-[0px] text-white transition hover:bg-[#0b5ed7] disabled:cursor-not-allowed disabled:opacity-60"
             >
-            {isSubmitting
+              {isSubmitting
                 ? "Saving…"
                 : mode === "add"
                 ? "Save Account"
@@ -658,7 +701,9 @@ function Field({
         className="mb-[5px] block text-left text-[12px] font-semibold leading-[18px] text-[#495057]"
       >
         {label}{" "}
-        {required && <span className="text-[#dc3545]">*</span>}
+        {required && (
+          <span className="text-[#dc3545]">*</span>
+        )}
       </label>
 
       <input

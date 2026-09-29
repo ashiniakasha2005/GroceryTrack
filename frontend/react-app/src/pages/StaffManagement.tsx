@@ -12,9 +12,14 @@ type Staff = {
   initials: string
 }
 
-type ActionType = 'deactivate' | 'activate' | 'delete' | null
+type ActionType =
+  | 'deactivate'
+  | 'activate'
+  | 'delete'
+  | 'reset-password'
+  | null
 
-type FormState =
+  type FormState =
   | {
       mode: 'add'
     }
@@ -147,6 +152,8 @@ function StaffManagement() {
   const [search, setSearch] = useState('')
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null)
   const [actionType, setActionType] = useState<ActionType>(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetPasswordError, setResetPasswordError] = useState('')
   const [toast, setToast] = useState<string | null>(null)
 
   const [formState, setFormState] = useState<FormState>(null)
@@ -211,11 +218,15 @@ function StaffManagement() {
   ) => {
     setSelectedStaff(member)
     setActionType(action)
+    setResetPassword('')
+    setResetPasswordError('')
   }
 
   const closeConfirmation = () => {
     setSelectedStaff(null)
     setActionType(null)
+    setResetPassword('')
+    setResetPasswordError('')
   }
 
   const confirmAction = () => {
@@ -234,6 +245,21 @@ function StaffManagement() {
 
       closeConfirmation()
       showToast(`${deletedName}'s account was deleted.`)
+      return
+    }
+
+    if (actionType === 'reset-password') {
+      if (resetPassword.trim().length < 8) {
+        setResetPasswordError('Password must be at least 8 characters.')
+        return
+      }
+
+      const staffName = selectedStaff.name
+
+      // Frontend reset-password flow. Connect this branch to the backend
+      // reset-password endpoint when that endpoint is available.
+      closeConfirmation()
+      showToast(`Password reset form submitted for ${staffName}.`)
       return
     }
 
@@ -416,6 +442,23 @@ function StaffManagement() {
     />
   )
 
+  const renderResetPasswordIcon = () => (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="5" y="10" width="14" height="10" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+      <path d="M12 14v3" />
+    </svg>
+  )
+
   const renderAccountActionIcon = (
     status: Staff['status'],
   ) => (
@@ -499,6 +542,10 @@ function StaffManagement() {
       return 'Deactivate Staff Account'
     }
 
+    if (actionType === 'reset-password') {
+      return 'Reset Staff Password'
+    }
+
     return 'Activate Staff Account'
   }
 
@@ -513,6 +560,10 @@ function StaffManagement() {
 
     if (actionType === 'deactivate') {
       return `Are you sure you want to deactivate ${selectedStaff.name}'s account? They will no longer be able to access the system.`
+    }
+
+    if (actionType === 'reset-password') {
+      return `Enter a new password for ${selectedStaff.name}'s staff account.`
     }
 
     return `Are you sure you want to activate ${selectedStaff.name}'s account?`
@@ -935,6 +986,22 @@ function StaffManagement() {
                           )}
                         </button>
 
+                        {/* Reset Password */}
+                        <button
+                          type="button"
+                          title="Reset Password"
+                          aria-label={`Reset password for ${member.name}`}
+                          onClick={() =>
+                            openConfirmation(
+                              member,
+                              'reset-password',
+                            )
+                          }
+                          style={actionButtonStyle}
+                        >
+                          {renderResetPasswordIcon()}
+                        </button>
+
                         {/* Delete */}
                         <button
                           type="button"
@@ -1057,6 +1124,62 @@ function StaffManagement() {
               >
                 {getModalMessage()}
               </p>
+
+              {actionType === 'reset-password' && (
+                <div style={{ marginTop: '14px' }}>
+                  <label
+                    htmlFor="reset-password-input"
+                    style={{
+                      display: 'block',
+                      marginBottom: '6px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: '#495057',
+                    }}
+                  >
+                    New Password
+                  </label>
+
+                  <input
+                    id="reset-password-input"
+                    type="password"
+                    value={resetPassword}
+                    onChange={(event) => {
+                      setResetPassword(event.target.value)
+                      if (resetPasswordError) {
+                        setResetPasswordError('')
+                      }
+                    }}
+                    placeholder="Enter a new password"
+                    autoFocus
+                    style={{
+                      width: '100%',
+                      height: '36px',
+                      boxSizing: 'border-box',
+                      border: `1px solid ${
+                        resetPasswordError ? '#dc3545' : '#dee2e6'
+                      }`,
+                      borderRadius: '6px',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      color: '#495057',
+                      outline: 'none',
+                    }}
+                  />
+
+                  {resetPasswordError && (
+                    <div
+                      style={{
+                        marginTop: '5px',
+                        color: '#dc3545',
+                        fontSize: '10px',
+                      }}
+                    >
+                      {resetPasswordError}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -1078,7 +1201,9 @@ function StaffManagement() {
                   ? 'Delete Account'
                   : actionType === 'deactivate'
                     ? 'Deactivate'
-                    : 'Activate'}
+                    : actionType === 'reset-password'
+                      ? 'Reset Password'
+                      : 'Activate'}
               </button>
             </div>
           </div>
