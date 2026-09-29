@@ -1,11 +1,12 @@
 import { Router, Response } from 'express';
 import { authenticateToken, authorizeRoles, AuthRequest } from '../middleware/authMiddleware';
-import { login } from '../controllers/authController'; // Ashiniගේ real login function එක
+import { login, logout } from '../controllers/authController';
 
 const router = Router();
 
-// 1. Ashiniගේ Real Login Endpoint එක
+// 1. Auth Endpoints
 router.post('/login', login);
+router.post('/logout', logout);
 
 // 2. Admin Dashboard Protected Route (GT-BUG-002)
 router.get(

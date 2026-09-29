@@ -41,3 +41,13 @@ export async function login(req: Request, res: Response) {
     return res.status(500).json({ message: 'Server error' });
   }
 }
+
+export const logout = async (req: Request, res: Response) => {
+  try {
+    return res.status(200).json({ 
+      message: "Logout successful. Please remove token from client storage." 
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error during logout", error });
+  }
+};

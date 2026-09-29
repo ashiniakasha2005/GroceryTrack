@@ -1,4 +1,4 @@
-import 'dotenv/config'; // මේ පේළිය උඩින්ම එකතු කරන්න
+import 'dotenv/config'; // 
 import express from 'express';
 import authRoutes from './routes/authRoutes';
 

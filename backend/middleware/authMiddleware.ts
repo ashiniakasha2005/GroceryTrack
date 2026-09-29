@@ -25,7 +25,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
       return res.status(403).json({ message: 'Invalid or expired token' });
     }
     
-    req.user = decoded as JwtPayload; // දැන් මෙතන Red Error එක සම්පූර්ණයෙන්ම නැතිවෙනවා!
+    req.user = decoded as JwtPayload; 
     next();
   });
 }
