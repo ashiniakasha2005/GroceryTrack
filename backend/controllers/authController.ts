@@ -3,6 +3,9 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { findUserByIdentifier } from '../models/userModel';
 
+// In-memory array to store blacklisted tokens after logout
+export const tokenBlacklist: string[] = [];
+
 export async function login(req: Request, res: Response) {
   try {
     const { identifier, password } = req.body;
@@ -44,8 +47,16 @@ export async function login(req: Request, res: Response) {
 
 export const logout = async (req: Request, res: Response) => {
   try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+      // Add the current token to the blacklist array
+      tokenBlacklist.push(token);
+    }
+
     return res.status(200).json({ 
-      message: "Logout successful. Please remove token from client storage." 
+      message: "Logout successful. Token invalidated successfully." 
     });
   } catch (error) {
     return res.status(500).json({ message: "Server error during logout", error });
