@@ -1,0 +1,313 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+config/
+  db.ts
+controllers/
+  authController.ts
+middleware/
+  authMiddleware.ts
+models/
+  userModel.ts
+routes/
+  authRoutes.ts
+types/
+  express.d.ts
+.env.example
+package.json
+server.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="config/db.ts">
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+export const pool = mysql.createPool({
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'grocerytrack',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+</file>
+
+<file path="controllers/authController.ts">
+import { Request, Response } from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { findUserByIdentifier } from '../models/userModel';
+
+export async function login(req: Request, res: Response) {
+  try {
+    const { identifier, password } = req.body;
+
+    if (!identifier || !password) {
+      return res.status(400).json({ message: 'Email/username and password required' });
+    }
+
+    const user = await findUserByIdentifier(identifier);
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const signOptions = {
+      expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+    } as any;
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET as string,
+      signOptions
+    );
+
+    return res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: { id: user.id, email: user.email, role: user.role },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+
+export const logout = async (req: Request, res: Response) => {
+  try {
+    return res.status(200).json({ 
+      message: "Logout successful. Please remove token from client storage." 
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Server error during logout", error });
+  }
+};
+</file>
+
+<file path="middleware/authMiddleware.ts">
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+
+interface JwtPayload {
+  userId: number;
+  email: string;
+  role: string;
+}
+
+// req.user එක අඳුරගන්න Custom Request interface එක
+export interface AuthRequest extends Request {
+  user?: JwtPayload;
+}
+
+export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'No token provided. Please log in.' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET as string, (err: any, decoded: any) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    
+    req.user = decoded as JwtPayload; 
+    next();
+  });
+}
+
+export function authorizeRoles(...allowedRoles: string[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'User authentication required' });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Access denied: Insufficient permissions' });
+    }
+
+    next();
+  };
+}
+</file>
+
+<file path="models/userModel.ts">
+import { pool } from '../config/db';
+import { RowDataPacket } from 'mysql2';
+
+export interface User extends RowDataPacket {
+  id: number;
+  email: string;
+  username: string;
+  password_hash: string;
+  role: string;
+}
+
+export async function findUserByIdentifier(identifier: string): Promise<User | null> {
+  const [rows] = await pool.query<User[]>(
+    'SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1',
+    [identifier, identifier]
+  );
+  return rows.length > 0 ? rows[0]! : null;
+}
+</file>
+
+<file path="routes/authRoutes.ts">
+import { Router, Response } from 'express';
+import { authenticateToken, authorizeRoles, AuthRequest } from '../middleware/authMiddleware';
+import { login, logout } from '../controllers/authController';
+
+const router = Router();
+
+// 1. Auth Endpoints
+router.post('/login', login);
+router.post('/logout', logout);
+
+// 2. Admin Dashboard Protected Route (GT-BUG-002)
+router.get(
+  '/admin-dashboard',
+  authenticateToken,
+  authorizeRoles('admin'),
+  (req: AuthRequest, res: Response) => {
+    res.status(200).json({
+      message: `Welcome Admin! Access granted. User ID: ${req.user?.userId}`
+    });
+  }
+);
+
+export default router;
+</file>
+
+<file path="types/express.d.ts">
+import { Request } from 'express';
+
+export interface JwtPayload {
+  userId: number;
+  email: string;
+  role: string;
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      user?: JwtPayload;
+    }
+  }
+}
+</file>
+
+<file path=".env.example">
+PORT=5000
+JWT_SECRET=your_jwt_secret_key_here
+JWT_EXPIRES_IN=1h
+
+DB_HOST=mysql-29e2cf3d-grocerytrack.h.aivencloud.com
+DB_USER=your_database_username
+DB_PASSWORD=your_database_password
+DB_NAME=defaultdb
+DB_PORT=11372
+DB_SSL_CA=./ca.pem
+</file>
+
+<file path="package.json">
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "ts-node-dev server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^22.20.4",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}
+</file>
+
+<file path="server.ts">
+import 'dotenv/config'; // 
+import express from 'express';
+import authRoutes from './routes/authRoutes';
+
+const app = express();
+app.use(express.json());
+
+// Auth Routes
+app.use('/api/auth', authRoutes);
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+</file>
+
+</files>
