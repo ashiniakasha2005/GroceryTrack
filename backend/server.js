@@ -86,6 +86,50 @@ app.get("/products", (req, res) => {
     });
 });
 
+// =========================
+// SEARCH PRODUCTS BY NAME
+// =========================
+
+app.get("/api/products/search", (req, res) => {
+
+    const { name } = req.query;
+
+    if (!name) {
+        return res.status(400).json({
+            message: "Product name is required"
+        });
+    }
+
+    const sql = `
+        SELECT
+            p.product_name AS name,
+            c.category_name AS category,
+            p.price,
+            p.current_stock AS stock
+        FROM products p
+        JOIN categories c
+            ON p.category_id = c.category_id
+        WHERE p.product_name LIKE ?
+    `;
+
+    db.query(
+        sql,
+        [`%${name}%`],
+        (err, results) => {
+
+            if (err) {
+                console.error(err);
+
+                return res.status(500).json({
+                    message: "Database error"
+                });
+            }
+
+            res.status(200).json(results);
+        }
+    );
+
+});
 
 // =========================
 // USER REGISTRATION
