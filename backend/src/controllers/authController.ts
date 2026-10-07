@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { findUserByIdentifier } from '../models/userModel';
+export const tokenBlacklist: string[] = [];
 
 export async function login(req: Request, res: Response) {
   try {
