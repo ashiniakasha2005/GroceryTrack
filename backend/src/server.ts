@@ -1,89 +1,99 @@
-require("dotenv").config();
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import mysql, {
+    RowDataPacket,
+    ResultSetHeader
+} from "mysql2";
+import bcrypt from "bcrypt";
+import fs from "fs";
+import path from "path";
 
-const bcrypt = require("bcrypt");
-const express = require("express");
-const mysql = require("mysql2");
-const cors = require("cors");
-const fs = require("fs");
-const path = require("path");
+dotenv.config();
 
 const app = express();
 
-// Middleware
+// =========================
+// MIDDLEWARE
+// =========================
+
 app.use(cors());
 app.use(express.json());
 
-// Aiven MySQL connection
+// =========================
+// AIVEN MYSQL CONNECTION
+// =========================
+
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT,
+    port: Number(process.env.DB_PORT),
 
     ssl: {
         ca: fs.readFileSync(
-            path.join(__dirname, "ca.pem")
+            path.join(__dirname, "../ca.pem")
         ),
         rejectUnauthorized: true
     }
 });
 
-// Connect to Aiven MySQL
+// =========================
+// CONNECT TO DATABASE
+// =========================
+
 db.connect((err) => {
     if (err) {
-        console.error("MySQL connection failed:", err.message);
+        console.error(
+            "Database connection failed:",
+            err.message
+        );
         return;
     }
 
     console.log("Aiven MySQL connected successfully!");
 });
 
-
 // =========================
 // HOME
 // =========================
 
 app.get("/", (req, res) => {
-    res.send("GroceryTrack Backend is Running!");
+    res.send("GroceryTrack TypeScript Backend is Running!");
 });
-
 
 // =========================
 // GET CATEGORIES
 // =========================
 
-app.get("/categories", (req, res) => {
-    db.query("SELECT * FROM categories", (err, results) => {
-        if (err) {
-            console.error(err);
+app.get("/api/categories", (req, res) => {
 
-            return res.status(500).json({
-                error: err.message
-            });
+    const sql = `
+        SELECT
+            category_id,
+            category_name
+        FROM categories
+    `;
+
+    db.query<RowDataPacket[]>(
+        sql,
+        (err, results) => {
+
+            if (err) {
+                console.error(
+                    "Database error:",
+                    err.message
+                );
+
+                return res.status(500).json({
+                    message: "Database error"
+                });
+            }
+
+            res.status(200).json(results);
         }
-
-        res.json(results);
-    });
-});
-
-
-// =========================
-// GET PRODUCTS
-// =========================
-
-app.get("/products", (req, res) => {
-    db.query("SELECT * FROM products", (err, results) => {
-        if (err) {
-            console.error(err);
-
-            return res.status(500).json({
-                error: err.message
-            });
-        }
-
-        res.json(results);
-    });
+    );
 });
 
 // =========================
@@ -94,7 +104,10 @@ app.get("/api/products/search", (req, res) => {
 
     const { name } = req.query;
 
-    if (!name) {
+    if (
+        typeof name !== "string" ||
+        !name.trim()
+    ) {
         return res.status(400).json({
             message: "Product name is required"
         });
@@ -112,13 +125,16 @@ app.get("/api/products/search", (req, res) => {
         WHERE p.product_name LIKE ?
     `;
 
-    db.query(
+    db.query<RowDataPacket[]>(
         sql,
-        [`%${name}%`],
+        [`%${name.trim()}%`],
         (err, results) => {
 
             if (err) {
-                console.error(err);
+                console.error(
+                    "Database error:",
+                    err.message
+                );
 
                 return res.status(500).json({
                     message: "Database error"
@@ -128,35 +144,6 @@ app.get("/api/products/search", (req, res) => {
             res.status(200).json(results);
         }
     );
-
-});
-
-// =========================
-// GET ALL CATEGORIES
-// =========================
-
-app.get("/api/categories", (req, res) => {
-
-    const sql = `
-        SELECT
-            category_id,
-            category_name
-        FROM categories
-    `;
-
-    db.query(sql, (err, results) => {
-
-        if (err) {
-            console.error(err);
-
-            return res.status(500).json({
-                message: "Database error"
-            });
-        }
-
-        res.status(200).json(results);
-    });
-
 });
 
 // =========================
@@ -174,59 +161,55 @@ app.post("/auth/register", async (req, res) => {
             password
         } = req.body;
 
-
         // Check required fields
-        if (!name || !email || !username || !password) {
-
+        if (
+            !name ||
+            !email ||
+            !username ||
+            !password
+        ) {
             return res.status(400).json({
                 message: "All fields are required"
             });
-
         }
 
-
-        // Check whether email or username already exists
+        // Check whether email or username exists
         const checkSql = `
             SELECT *
             FROM users
             WHERE email = ? OR username = ?
         `;
 
-
-        db.query(
+        db.query<RowDataPacket[]>(
             checkSql,
             [email, username],
             async (err, results) => {
 
                 if (err) {
-
-                    console.error(err);
+                    console.error(
+                        "Database error:",
+                        err.message
+                    );
 
                     return res.status(500).json({
                         message: "Database error"
                     });
-
                 }
-
 
                 // User already exists
                 if (results.length > 0) {
 
                     return res.status(409).json({
-                        message: "Email or username already exists"
+                        message:
+                            "Email or username already exists"
                     });
-
                 }
 
+                // Hash password
+                const passwordHash =
+                    await bcrypt.hash(password, 10);
 
-                // Hash password using bcrypt
-                const passwordHash = await bcrypt.hash(
-                    password,
-                    10
-                );
-
-
-                // Insert user into database
+                // Insert user
                 const insertSql = `
                     INSERT INTO users
                     (
@@ -238,8 +221,7 @@ app.post("/auth/register", async (req, res) => {
                     VALUES (?, ?, ?, ?)
                 `;
 
-
-                db.query(
+                db.query<ResultSetHeader>(
                     insertSql,
                     [
                         name,
@@ -250,40 +232,39 @@ app.post("/auth/register", async (req, res) => {
                     (err, result) => {
 
                         if (err) {
-
-                            console.error(err);
+                            console.error(
+                                "Registration error:",
+                                err.message
+                            );
 
                             return res.status(500).json({
-                                message: "Failed to register user"
+                                message:
+                                    "Failed to register user"
                             });
-
                         }
 
-
-                        // Registration successful
                         res.status(201).json({
-                            message: "User registered successfully",
+                            message:
+                                "User registered successfully",
                             userId: result.insertId
                         });
-
                     }
                 );
-
             }
         );
 
     } catch (error) {
 
-        console.error(error);
+        console.error(
+            "Server error:",
+            error
+        );
 
         res.status(500).json({
             message: "Server error"
         });
-
     }
-
 });
-
 
 // =========================
 // USER LOGIN
@@ -296,71 +277,64 @@ app.post("/auth/login", (req, res) => {
         password
     } = req.body;
 
-
     // Check required fields
     if (!username || !password) {
 
         return res.status(400).json({
-            message: "Username and password are required"
+            message:
+                "Username and password are required"
         });
-
     }
 
-
-    // Find user by username
+    // Find user
     const sql = `
         SELECT *
         FROM users
         WHERE username = ?
     `;
 
-
-    db.query(
+    db.query<RowDataPacket[]>(
         sql,
         [username],
         async (err, results) => {
 
             if (err) {
-
-                console.error(err);
+                console.error(
+                    "Database error:",
+                    err.message
+                );
 
                 return res.status(500).json({
                     message: "Database error"
                 });
-
             }
-
 
             // User not found
             if (results.length === 0) {
 
                 return res.status(401).json({
-                    message: "Invalid username or password"
+                    message:
+                        "Invalid username or password"
                 });
-
             }
-
 
             const user = results[0];
 
+            // Compare password
+            const passwordMatch =
+                await bcrypt.compare(
+                    password,
+                    user.password_hash
+                );
 
-            // Compare entered password
-            // with bcrypt hashed password
-            const passwordMatch = await bcrypt.compare(
-                password,
-                user.password_hash
-            );
-
-
-            // Password is incorrect
+            // Wrong password
             if (!passwordMatch) {
 
                 return res.status(401).json({
-                    message: "Invalid username or password"
+                    message:
+                        "Invalid username or password"
                 });
-
             }
-
 
             // Login successful
             res.status(200).json({
@@ -374,25 +348,21 @@ app.post("/auth/login", (req, res) => {
                     username: user.username,
                     role: user.role
                 }
-
             });
-
         }
     );
-
 });
-
 
 // =========================
 // START SERVER
 // =========================
 
-const PORT = process.env.PORT || 3000;
+const PORT =
+    Number(process.env.PORT) || 3000;
 
 app.listen(PORT, () => {
 
     console.log(
         `Server running on port ${PORT}`
     );
-
 });
