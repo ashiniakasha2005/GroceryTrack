@@ -132,6 +132,34 @@ app.get("/api/products/search", (req, res) => {
 });
 
 // =========================
+// GET ALL CATEGORIES
+// =========================
+
+app.get("/api/categories", (req, res) => {
+
+    const sql = `
+        SELECT
+            category_id,
+            category_name
+        FROM categories
+    `;
+
+    db.query(sql, (err, results) => {
+
+        if (err) {
+            console.error(err);
+
+            return res.status(500).json({
+                message: "Database error"
+            });
+        }
+
+        res.status(200).json(results);
+    });
+
+});
+
+// =========================
 // USER REGISTRATION
 // =========================
 
