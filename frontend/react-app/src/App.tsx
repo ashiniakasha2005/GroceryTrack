@@ -1,7 +1,9 @@
+
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import Dashboard from './pages/Dashboard'
 import StaffManagement from './pages/StaffManagement'
+import ProductManagement from './pages/ProductManagement'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 
@@ -21,6 +23,7 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/staff" element={<StaffManagement />} />
+        <Route path="/products" element={<ProductManagement />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
