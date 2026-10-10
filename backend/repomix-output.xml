@@ -53,6 +53,7 @@ routes/
 types/
   express.d.ts
 .env.example
+ca.pem
 package.json
 server.ts
 </directory_structure>
@@ -63,14 +64,24 @@ This section contains the contents of the repository's files.
 <file path="config/db.ts">
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
+
+// SSL Certificate එක read කිරීම
+const sslCaPath = process.env.DB_SSL_CA || './ca.pem';
+const sslCert = fs.existsSync(sslCaPath) 
+  ? fs.readFileSync(path.resolve(sslCaPath)) 
+  : undefined;
 
 export const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'grocerytrack',
+  port: Number(process.env.DB_PORT) || 3306, // Port එක .env එකෙන් ගන්න
+  ssl: sslCert ? { ca: sslCert, rejectUnauthorized: true } : undefined, // SSL Config
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
@@ -82,6 +93,9 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { findUserByIdentifier } from '../models/userModel';
+
+// In-memory array to store blacklisted tokens after logout
+export const tokenBlacklist: string[] = [];
 
 export async function login(req: Request, res: Response) {
   try {
@@ -124,8 +138,16 @@ export async function login(req: Request, res: Response) {
 
 export const logout = async (req: Request, res: Response) => {
   try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+      // Add the current token to the blacklist array
+      tokenBlacklist.push(token);
+    }
+
     return res.status(200).json({ 
-      message: "Logout successful. Please remove token from client storage." 
+      message: "Logout successful. Token invalidated successfully." 
     });
   } catch (error) {
     return res.status(500).json({ message: "Server error during logout", error });
@@ -136,6 +158,7 @@ export const logout = async (req: Request, res: Response) => {
 <file path="middleware/authMiddleware.ts">
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { tokenBlacklist } from '../controllers/authController'; // authController එකෙන් blacklist එක import කරගන්න
 
 interface JwtPayload {
   userId: number;
@@ -154,6 +177,11 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
 
   if (!token) {
     return res.status(401).json({ message: 'No token provided. Please log in.' });
+  }
+
+  // Token එක Blacklist එකේ තියෙනවාදැයි පරීක්ෂා කිරීම (Logout වූ Token එකක්දැයි බලයි)
+  if (tokenBlacklist.includes(token)) {
+    return res.status(401).json({ message: 'Token has been invalidated. Please log in again.' });
   }
 
   jwt.verify(token, process.env.JWT_SECRET as string, (err: any, decoded: any) => {
@@ -257,6 +285,34 @@ DB_PASSWORD=your_database_password
 DB_NAME=defaultdb
 DB_PORT=11372
 DB_SSL_CA=./ca.pem
+</file>
+
+<file path="ca.pem">
+-----BEGIN CERTIFICATE-----
+MIIERDCCAqygAwIBAgIUNSNhEHWL+29MUGJGCT1SURgRZ8QwDQYJKoZIhvcNAQEM
+BQAwOjE4MDYGA1UEAwwvMzM0MzBkNjUtYzc5Yy00MWQxLWFjNTYtMzZjODU3ZDY2
+Yzg2IFByb2plY3QgQ0EwHhcNMjYwOTI0MDMwNTQ5WhcNMzYwOTIxMDMwNTQ5WjA6
+MTgwNgYDVQQDDC8zMzQzMGQ2NS1jNzljLTQxZDEtYWM1Ni0zNmM4NTdkNjZjODYg
+UHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBAJx2L71Y
+mhpUbYrSd9vGHyk0KDwYzzGOejkcvDtv83FCqzhUZ+PUnxulhwpI4mU3JV9/M7dF
+9g4VaZDqyTCVrHZYxuRPTC5L5l35g9tu9MbeRAWM8GEUBv4I0v+LSAXJuZK+ejRM
+FzAv9b4c68IiRcF4/b1nOywcI5jJ7MCuIoPSZvcxd+RafZUI6OknvNv0l/LFp1gh
+bRXVof4iekHjzTvjsBkbY/pUn5WVJU1XsP4z/z9MTKL3e9jyv+p9kbTrW+7CmYud
+XZPxQZHCY7Qp+QvhArJU/vOMzhhCWM62S+7p7ATmabjcA0/k3r77SZhRBSskOJNb
+ngeYAwLpkRQMZMqycwHCTCEWd5IDG2Fz/Xb4taUJhdhQGXQ6V8Qj9y72aMzryLdR
+UinmUQukanSlad8PP2T2ebTtQw1wB6ANj8t6xzT3VqjZ9AUfVVDyStcLX1nQWTFx
+QiOigrQudNXJFiqqQ6NviyNgjeGQ5Jt1150urxLCYdzvSfyKqqaLRsflhQIDAQAB
+o0IwQDAdBgNVHQ4EFgQUNVUN6Q4g3vSe6Oer0KeoNIMM+NEwEgYDVR0TAQH/BAgw
+BgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQADggGBAH+Yl5GWftKf
+EAiX0IDuEGvTtFn5Iyo54f9+suZ/g5QFpkfT7Xf8d8DwzrPOngw+c93kYkErgNFF
+pV7/EdWyCJ3m19DW5Azm12NJhhs+DK6eNMxDQYMGB4rEzCD934tt6or5MconxWRy
+Eal6pn/tRpe4jo+tn3n+LgBg7OwwWclqw9lTVeRQdjUugztZ3ACy5SdQPMfhZlcw
+lAcBpkLJBXOMNvfU5uYJLfEJM3w91qiUTH76MIQFJourkZBMuO3Dv12r/1FmBYa5
+NIfw0Mcp+4U74kmJpstG2dZLF/P09bsm8JgCMPl25k1kPwGr+NoFysLB0oVa9cnQ
+cEybTXtdj/sSu4U2OkAMx8HsnMHzjMeI4w5HU4XqEQhj0DGt/SpjsgFMm72kuovo
+21wygB2usdN7oALH5NDc7+tv8iMYyF2wv1m+82DC7fG43ZnJMz6MrT5b6lmwyJbt
+0yyb/WKPPxQmt/91VRzxkJR1CH5Wo05nkCH2lzQo2RKePDHKG8sCBQ==
+-----END CERTIFICATE-----
 </file>
 
 <file path="package.json">
