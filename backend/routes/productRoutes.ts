@@ -106,7 +106,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
 
 // ADD PRODUCT
-router.post("/", authenticateToken, adminOnly, async (req, res) => {
+router.post("/", authenticateToken, async (req, res) => {
 
     try {
 
@@ -156,7 +156,7 @@ router.post("/", authenticateToken, adminOnly, async (req, res) => {
 
 
 // UPDATE PRODUCT
-router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
+router.put("/:id", authenticateToken, async (req, res) => {
 
     try {
 
@@ -216,7 +216,7 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
 
 
 // DELETE PRODUCT
-router.delete("/:id", authenticateToken, adminOnly, async (req, res) => {
+router.delete("/:id", authenticateToken, async (req, res) => {
 
     try {
 
