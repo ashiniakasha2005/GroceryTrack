@@ -21,9 +21,25 @@ function DeleteProductModal({
         aria-labelledby="delete-product-title"
         aria-describedby="delete-product-description"
       >
-        <div className="delete-product-icon" aria-hidden="true">
-          <span>!</span>
-        </div>
+
+  <div className="delete-product-icon" aria-hidden="true">
+  <svg
+    viewBox="0 0 24 24"
+    width="25"
+    height="25"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M3 6h18" />
+    <path d="M8 6V4h8v2" />
+    <path d="m19 6-1 14H6L5 6" />
+    <path d="M10 11v5M14 11v5" />
+  </svg>
+</div>
+
 
         <h2 id="delete-product-title">Delete Product?</h2>
 

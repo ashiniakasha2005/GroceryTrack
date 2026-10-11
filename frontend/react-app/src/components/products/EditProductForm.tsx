@@ -96,16 +96,28 @@ function EditProductForm({
             />
           </div>
 
-          <div className="product-form-field">
-            <label htmlFor="edit-category">Category *</label>
-            <input
-              id="edit-category"
-              name="category"
-              value={form.category}
-              onChange={handleChange}
-              required
-            />
-          </div>
+          
+<div className="product-form-field">
+  <label htmlFor="edit-category">Category *</label>
+  <select
+    id="edit-category"
+    name="category"
+    value={form.category}
+    onChange={handleChange}
+    required
+  >
+    <option value="">Select category</option>
+    <option value="Dry Goods">Dry Goods</option>
+    <option value="Dairy">Dairy</option>
+    <option value="Beverages">Beverages</option>
+    <option value="Fruits & Vegetables">Fruits & Vegetables</option>
+    <option value="Bakery">Bakery</option>
+    <option value="Frozen Foods">Frozen Foods</option>
+    <option value="Snacks">Snacks</option>
+    <option value="Household">Household</option>
+    <option value="Other">Other</option>
+  </select>
+</div>
 
           <div className="product-form-grid">
             <div className="product-form-field">
