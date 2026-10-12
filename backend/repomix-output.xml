@@ -44,18 +44,35 @@ config/
   db.ts
 controllers/
   authController.ts
+  productController.ts
 middleware/
   authMiddleware.ts
 models/
   userModel.ts
 routes/
   authRoutes.ts
+  ca (1).pem
+  productRoutes.ts
+src/
+  config/
+    db.ts
+  controllers/
+    authController.ts
+  models/
+    userModel.ts
+  routes/
+    authRoutes.ts
+  scripts/
+    checkTables.ts
+    createTestUser.ts
+  app.ts
 types/
   express.d.ts
 .env.example
-ca.pem
+API
 package.json
 server.ts
+tsconfig.json
 </directory_structure>
 
 <files>
@@ -152,6 +169,70 @@ export const logout = async (req: Request, res: Response) => {
   } catch (error) {
     return res.status(500).json({ message: "Server error during logout", error });
   }
+};
+</file>
+
+<file path="controllers/productController.ts">
+import { Request, Response } from 'express';
+import { pool } from '../config/db';
+
+export const createProduct = async (req: Request, res: Response) => {
+    try {
+        const { product_name, category_id, price, min_stock_level, current_stock } = req.body;
+
+        // Input Validation
+        if (!product_name || typeof product_name !== 'string' || product_name.trim() === '') {
+            return res.status(400).json({ message: 'Product name is required.' });
+        }
+
+        if (!category_id || isNaN(Number(category_id))) {
+            return res.status(400).json({ message: 'A valid category_id is required.' });
+        }
+
+        if (price === undefined || isNaN(Number(price)) || Number(price) < 0) {
+            return res.status(400).json({ message: 'Price must be a valid non-negative number.' });
+        }
+
+        const minStock = min_stock_level !== undefined ? Number(min_stock_level) : 0;
+        const currentStock = current_stock !== undefined ? Number(current_stock) : 0;
+
+        if (minStock < 0 || currentStock < 0) {
+            return res.status(400).json({ message: 'Stock levels cannot be negative numbers.' });
+        }
+
+        // Database Query with updated column name: minimum_stock
+        const query = `
+            INSERT INTO products (product_name, category_id, price, minimum_stock, current_stock)
+            VALUES (?, ?, ?, ?, ?)
+        `;
+
+        const [result]: any = await pool.execute(query, [
+            product_name.trim(),
+            category_id,
+            price,
+            minStock,
+            currentStock
+        ]);
+
+        return res.status(201).json({
+            message: 'Product created successfully.',
+            product: {
+                product_id: result.insertId,
+                product_name: product_name.trim(),
+                category_id,
+                price,
+                minimum_stock: minStock,
+                current_stock: currentStock
+            }
+        });
+
+    } catch (error: any) {
+        console.error('Error creating product:', error);
+        return res.status(500).json({
+            message: 'An internal server error occurred.',
+            error: error.message
+        });
+    }
 };
 </file>
 
@@ -256,6 +337,214 @@ router.get(
 export default router;
 </file>
 
+<file path="routes/ca (1).pem">
+-----BEGIN CERTIFICATE-----
+MIIERDCCAqygAwIBAgIUNSNhEHWL+29MUGJGCT1SURgRZ8QwDQYJKoZIhvcNAQEM
+BQAwOjE4MDYGA1UEAwwvMzM0MzBkNjUtYzc5Yy00MWQxLWFjNTYtMzZjODU3ZDY2
+Yzg2IFByb2plY3QgQ0EwHhcNMjYwOTI0MDMwNTQ5WhcNMzYwOTIxMDMwNTQ5WjA6
+MTgwNgYDVQQDDC8zMzQzMGQ2NS1jNzljLTQxZDEtYWM1Ni0zNmM4NTdkNjZjODYg
+UHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBAJx2L71Y
+mhpUbYrSd9vGHyk0KDwYzzGOejkcvDtv83FCqzhUZ+PUnxulhwpI4mU3JV9/M7dF
+9g4VaZDqyTCVrHZYxuRPTC5L5l35g9tu9MbeRAWM8GEUBv4I0v+LSAXJuZK+ejRM
+FzAv9b4c68IiRcF4/b1nOywcI5jJ7MCuIoPSZvcxd+RafZUI6OknvNv0l/LFp1gh
+bRXVof4iekHjzTvjsBkbY/pUn5WVJU1XsP4z/z9MTKL3e9jyv+p9kbTrW+7CmYud
+XZPxQZHCY7Qp+QvhArJU/vOMzhhCWM62S+7p7ATmabjcA0/k3r77SZhRBSskOJNb
+ngeYAwLpkRQMZMqycwHCTCEWd5IDG2Fz/Xb4taUJhdhQGXQ6V8Qj9y72aMzryLdR
+UinmUQukanSlad8PP2T2ebTtQw1wB6ANj8t6xzT3VqjZ9AUfVVDyStcLX1nQWTFx
+QiOigrQudNXJFiqqQ6NviyNgjeGQ5Jt1150urxLCYdzvSfyKqqaLRsflhQIDAQAB
+o0IwQDAdBgNVHQ4EFgQUNVUN6Q4g3vSe6Oer0KeoNIMM+NEwEgYDVR0TAQH/BAgw
+BgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQADggGBAH+Yl5GWftKf
+EAiX0IDuEGvTtFn5Iyo54f9+suZ/g5QFpkfT7Xf8d8DwzrPOngw+c93kYkErgNFF
+pV7/EdWyCJ3m19DW5Azm12NJhhs+DK6eNMxDQYMGB4rEzCD934tt6or5MconxWRy
+Eal6pn/tRpe4jo+tn3n+LgBg7OwwWclqw9lTVeRQdjUugztZ3ACy5SdQPMfhZlcw
+lAcBpkLJBXOMNvfU5uYJLfEJM3w91qiUTH76MIQFJourkZBMuO3Dv12r/1FmBYa5
+NIfw0Mcp+4U74kmJpstG2dZLF/P09bsm8JgCMPl25k1kPwGr+NoFysLB0oVa9cnQ
+cEybTXtdj/sSu4U2OkAMx8HsnMHzjMeI4w5HU4XqEQhj0DGt/SpjsgFMm72kuovo
+21wygB2usdN7oALH5NDc7+tv8iMYyF2wv1m+82DC7fG43ZnJMz6MrT5b6lmwyJbt
+0yyb/WKPPxQmt/91VRzxkJR1CH5Wo05nkCH2lzQo2RKePDHKG8sCBQ==
+-----END CERTIFICATE-----
+</file>
+
+<file path="routes/productRoutes.ts">
+import { Router } from 'express';
+import { createProduct, updateProduct } from '../controllers/productController';
+import { authenticateToken, authorizeRoles } from '../middleware/authMiddleware'; // හෝ අදාළ path එක
+import { validateProductCategory } from '../middlewares/categoryMiddleware'; // අදාළ path එක
+
+const router = Router();
+
+// Category validation එකත් සමඟ Product Create කිරීම
+router.post('/', authenticateToken, authorizeRoles('admin'), validateProductCategory, createProduct);
+
+// Category validation එකත් සමඟ Product Update කිරීම
+router.put('/:id', authenticateToken, authorizeRoles('admin'), validateProductCategory, updateProduct);
+
+export default router;
+</file>
+
+<file path="src/config/db.ts">
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+
+dotenv.config();
+
+export const pool = mysql.createPool({
+  host: process.env.DB_HOST as string,
+  port: Number(process.env.DB_PORT),
+  user: process.env.DB_USER as string,
+  password: process.env.DB_PASSWORD as string,
+  database: process.env.DB_NAME as string,
+  waitForConnections: true,
+  connectionLimit: 10,
+  ssl: {
+    ca: fs.readFileSync(path.join(__dirname, '../../ca.pem')),
+    rejectUnauthorized: true,
+  },
+});
+</file>
+
+<file path="src/controllers/authController.ts">
+import { Request, Response } from 'express';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { findUserByIdentifier } from '../models/userModel';
+
+export async function login(req: Request, res: Response) {
+  try {
+    const { identifier, password } = req.body;
+
+    if (!identifier || !password) {
+  return res.status(400).json({ message: 'Email/username and password required' });
+}
+
+    const user = await findUserByIdentifier(identifier);
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+   const signOptions = {
+    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+    } as any;
+
+    const token = jwt.sign(
+  { userId: user.id, email: user.email, role: user.role },
+  process.env.JWT_SECRET as string,
+  signOptions
+);
+
+    return res.status(200).json({
+  message: 'Login successful',
+  token,
+  user: { id: user.id, email: user.email, role: user.role },
+});
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Server error' });
+  }
+}
+</file>
+
+<file path="src/models/userModel.ts">
+import { pool } from '../config/db';
+import { RowDataPacket } from 'mysql2';
+
+export interface User extends RowDataPacket {
+  id: number;
+  email: string;
+  username: string;
+  password_hash: string;
+  role: string;
+}
+
+export async function findUserByIdentifier(identifier: string): Promise<User | null> {
+  const [rows] = await pool.query<User[]>(
+    'SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1',
+    [identifier, identifier]
+  );
+  return rows.length > 0 ? rows[0]! : null;
+}
+</file>
+
+<file path="src/routes/authRoutes.ts">
+import { Router } from 'express';
+import { login } from '../controllers/authController';
+
+const router = Router();
+router.post('/login', login);
+
+export default router;
+</file>
+
+<file path="src/scripts/checkTables.ts">
+import { pool } from '../config/db';
+
+async function checkTables() {
+  try {
+    const [rows] = await pool.query('SHOW TABLES');
+    console.log('Tables in database:', rows);
+  } catch (error) {
+    console.error('Database connection error:', error);
+  } finally {
+    process.exit(0);
+  }
+}
+
+checkTables();
+</file>
+
+<file path="src/scripts/createTestUser.ts">
+import bcrypt from 'bcrypt';
+import { pool } from '../config/db';
+
+async function createTestUser() {
+  const name = 'Test User';
+  const email = 'test@example.com';
+  const username = 'testuser';
+  const plainPassword = 'password123';
+  const passwordHash = await bcrypt.hash(plainPassword, 10);
+
+  await pool.query(
+    'INSERT INTO users (name, email, username, password_hash) VALUES (?, ?, ?, ?)',
+    [name, email, username, passwordHash]
+  );
+
+  console.log('Test user created:');
+  console.log('Email:', email);
+  console.log('Username:', username);
+  console.log('Password:', plainPassword);
+  process.exit(0);
+}
+
+createTestUser().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
+</file>
+
+<file path="src/app.ts">
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import authRoutes from './routes/authRoutes';
+
+dotenv.config();
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+app.use('/api/auth', authRoutes);
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+</file>
+
 <file path="types/express.d.ts">
 import { Request } from 'express';
 
@@ -287,32 +576,8 @@ DB_PORT=11372
 DB_SSL_CA=./ca.pem
 </file>
 
-<file path="ca.pem">
------BEGIN CERTIFICATE-----
-MIIERDCCAqygAwIBAgIUNSNhEHWL+29MUGJGCT1SURgRZ8QwDQYJKoZIhvcNAQEM
-BQAwOjE4MDYGA1UEAwwvMzM0MzBkNjUtYzc5Yy00MWQxLWFjNTYtMzZjODU3ZDY2
-Yzg2IFByb2plY3QgQ0EwHhcNMjYwOTI0MDMwNTQ5WhcNMzYwOTIxMDMwNTQ5WjA6
-MTgwNgYDVQQDDC8zMzQzMGQ2NS1jNzljLTQxZDEtYWM1Ni0zNmM4NTdkNjZjODYg
-UHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBAJx2L71Y
-mhpUbYrSd9vGHyk0KDwYzzGOejkcvDtv83FCqzhUZ+PUnxulhwpI4mU3JV9/M7dF
-9g4VaZDqyTCVrHZYxuRPTC5L5l35g9tu9MbeRAWM8GEUBv4I0v+LSAXJuZK+ejRM
-FzAv9b4c68IiRcF4/b1nOywcI5jJ7MCuIoPSZvcxd+RafZUI6OknvNv0l/LFp1gh
-bRXVof4iekHjzTvjsBkbY/pUn5WVJU1XsP4z/z9MTKL3e9jyv+p9kbTrW+7CmYud
-XZPxQZHCY7Qp+QvhArJU/vOMzhhCWM62S+7p7ATmabjcA0/k3r77SZhRBSskOJNb
-ngeYAwLpkRQMZMqycwHCTCEWd5IDG2Fz/Xb4taUJhdhQGXQ6V8Qj9y72aMzryLdR
-UinmUQukanSlad8PP2T2ebTtQw1wB6ANj8t6xzT3VqjZ9AUfVVDyStcLX1nQWTFx
-QiOigrQudNXJFiqqQ6NviyNgjeGQ5Jt1150urxLCYdzvSfyKqqaLRsflhQIDAQAB
-o0IwQDAdBgNVHQ4EFgQUNVUN6Q4g3vSe6Oer0KeoNIMM+NEwEgYDVR0TAQH/BAgw
-BgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQADggGBAH+Yl5GWftKf
-EAiX0IDuEGvTtFn5Iyo54f9+suZ/g5QFpkfT7Xf8d8DwzrPOngw+c93kYkErgNFF
-pV7/EdWyCJ3m19DW5Azm12NJhhs+DK6eNMxDQYMGB4rEzCD934tt6or5MconxWRy
-Eal6pn/tRpe4jo+tn3n+LgBg7OwwWclqw9lTVeRQdjUugztZ3ACy5SdQPMfhZlcw
-lAcBpkLJBXOMNvfU5uYJLfEJM3w91qiUTH76MIQFJourkZBMuO3Dv12r/1FmBYa5
-NIfw0Mcp+4U74kmJpstG2dZLF/P09bsm8JgCMPl25k1kPwGr+NoFysLB0oVa9cnQ
-cEybTXtdj/sSu4U2OkAMx8HsnMHzjMeI4w5HU4XqEQhj0DGt/SpjsgFMm72kuovo
-21wygB2usdN7oALH5NDc7+tv8iMYyF2wv1m+82DC7fG43ZnJMz6MrT5b6lmwyJbt
-0yyb/WKPPxQmt/91VRzxkJR1CH5Wo05nkCH2lzQo2RKePDHKG8sCBQ==
------END CERTIFICATE-----
+<file path="API">
+
 </file>
 
 <file path="package.json">
@@ -322,8 +587,13 @@ cEybTXtdj/sSu4U2OkAMx8HsnMHzjMeI4w5HU4XqEQhj0DGt/SpjsgFMm72kuovo
   "description": "",
   "main": "index.js",
   "scripts": {
+
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "ts-node-dev server.ts"
+
+    "dev": "tsx watch src/app.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+
   },
   "keywords": [],
   "author": "",
@@ -332,27 +602,42 @@ cEybTXtdj/sSu4U2OkAMx8HsnMHzjMeI4w5HU4XqEQhj0DGt/SpjsgFMm72kuovo
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
+
     "dotenv": "^17.4.2",
+
+    "dotenv": "^18.0.3",
+
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.4"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
+
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.20.4",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.3"
+
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^26.6.2",
+    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+
   }
 }
 </file>
 
 <file path="server.ts">
-import 'dotenv/config'; // 
+import 'dotenv/config';
 import express from 'express';
 import authRoutes from './routes/authRoutes';
+import productRoutes from './routes/productRoutes';
 
 const app = express();
 app.use(express.json());
@@ -360,10 +645,60 @@ app.use(express.json());
 // Auth Routes
 app.use('/api/auth', authRoutes);
 
+// Product Routes
+app.use('/api', productRoutes);
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+</file>
+
+<file path="tsconfig.json">
+{
+  // Visit https://aka.ms/tsconfig to read more about this file
+  "compilerOptions": {
+    // File Layout
+    // "rootDir": "./src",
+    // "outDir": "./dist",
+
+    // Environment Settings
+    // See also https://aka.ms/tsconfig/module
+    "module": "nodenext",
+    "target": "esnext",
+    "types": [],
+    // For nodejs:
+    // "lib": ["esnext"],
+    // "types": ["node"],
+    // and npm install -D @types/node
+
+    // Other Outputs
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // Stricter Typechecking Options
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Style Options
+    // "noImplicitReturns": true,
+    // "noImplicitOverride": true,
+    // "noUnusedLocals": true,
+    // "noUnusedParameters": true,
+    // "noFallthroughCasesInSwitch": true,
+    // "noPropertyAccessFromIndexSignature": true,
+
+    // Recommended Options
+    "strict": true,
+    "jsx": "react-jsx",
+    //"verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+  }
+}
 </file>
 
 </files>
