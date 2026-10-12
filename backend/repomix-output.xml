@@ -368,15 +368,15 @@ cEybTXtdj/sSu4U2OkAMx8HsnMHzjMeI4w5HU4XqEQhj0DGt/SpjsgFMm72kuovo
 <file path="routes/productRoutes.ts">
 import { Router } from 'express';
 import { createProduct, updateProduct } from '../controllers/productController';
-import { authenticateToken, authorizeRoles } from '../middleware/authMiddleware'; // හෝ අදාළ path එක
-import { validateProductCategory } from '../middlewares/categoryMiddleware'; // අදාළ path එක
+import { authenticateToken, authorizeRoles } from '../middleware/authMiddleware';
+import { validateProductCategory } from '../middleware/categoryMiddleware';
 
 const router = Router();
 
-// Category validation එකත් සමඟ Product Create කිරීම
+// Route to create a new product with admin authorization and category validation
 router.post('/', authenticateToken, authorizeRoles('admin'), validateProductCategory, createProduct);
 
-// Category validation එකත් සමඟ Product Update කිරීම
+// Route to update an existing product with admin authorization and category validation
 router.put('/:id', authenticateToken, authorizeRoles('admin'), validateProductCategory, updateProduct);
 
 export default router;
