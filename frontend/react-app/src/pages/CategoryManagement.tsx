@@ -1,12 +1,9 @@
-
 import { useState } from 'react'
 import { useCategories } from '../context/CategoryContext'
 
 function CategoryManagement() {
-  // Temporary category data
   // Shared category data
-const { categories, setCategories } = useCategories()
-
+  const { categories, setCategories } = useCategories()
   // Add Category state
   const [newCategory, setNewCategory] = useState('')
   const [error, setError] = useState('')
@@ -116,7 +113,7 @@ const { categories, setCategories } = useCategories()
     setDeletingIndex(null)
   }
 
-  return (
+    return (
     <div className="space-y-6">
 
       {/* Page Heading */}
