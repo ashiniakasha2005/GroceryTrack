@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import mysql, {
@@ -8,6 +8,7 @@ import mysql, {
 import bcrypt from "bcrypt";
 import fs from "fs";
 import path from "path";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
 
@@ -112,8 +113,45 @@ app.get("/api/categories", async (req, res) => {
 //   limit        (optional)  -> default 20, max 100
 // =========================
 
-app.get("/api/products/search", async (req, res) => {
 
+app.get("/api/products/search", (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    const jwtSecret = process.env.JWT_SECRET;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return res.status(401).json({
+            message: "Authentication token is required"
+        });
+    }
+
+    if (!jwtSecret) {
+        return res.status(500).json({
+            message: "Server configuration error"
+        });
+    }
+
+    try {
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, jwtSecret);
+
+        if (
+            typeof decoded === "string" ||
+            !["admin", "staff"].includes(
+                String(decoded.role).toLowerCase()
+            )
+        ) {
+            return res.status(403).json({
+                message: "Admin or Staff access required"
+            });
+        }
+
+        next();
+    } catch {
+        return res.status(401).json({
+            message: "Invalid or expired token"
+        });
+    }
+}, async (req, res) => {
     const name =
         typeof req.query.name === "string"
             ? req.query.name.trim()
@@ -126,7 +164,10 @@ app.get("/api/products/search", async (req, res) => {
     }
 
     const categoryId = Number(req.query.category_id);
-    const limit = Math.min(Math.max(Number(req.query.limit) || 20, 1), 100);
+    const limit = Math.min(
+        Math.max(Number(req.query.limit) || 20, 1),
+        100
+    );
     const page = Math.max(Number(req.query.page) || 1, 1);
     const offset = (page - 1) * limit;
 
@@ -157,17 +198,16 @@ app.get("/api/products/search", async (req, res) => {
 
     try {
         const [rows] = await pool.query<RowDataPacket[]>(sql, params);
-
-        res.status(200).json(rows);
-
+        return res.status(200).json(rows);
     } catch (err: any) {
         console.error("Database error:", err.message);
 
-        res.status(500).json({
+        return res.status(500).json({
             message: "Database error"
         });
     }
 });
+
 
 // =========================
 // USER REGISTRATION
@@ -323,8 +363,29 @@ app.post("/auth/login", async (req, res) => {
         }
 
         // Login successful
-        res.status(200).json({
+        const jwtSecret = process.env.JWT_SECRET;
+
+        if (!jwtSecret) {
+            console.error("JWT_SECRET is not configured");
+
+            return res.status(500).json({
+                message: "Server configuration error"
+            });
+        }
+
+        const token = jwt.sign(
+            {
+                id: user.id,
+                username: user.username,
+                role: user.role
+            },
+            jwtSecret,
+            { expiresIn: "1h" }
+        );
+
+        return res.status(200).json({
             message: "Login successful",
+            token,
             user: {
                 id: user.id,
                 name: user.name,
