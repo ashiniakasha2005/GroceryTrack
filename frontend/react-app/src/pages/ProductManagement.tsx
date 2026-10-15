@@ -1,4 +1,5 @@
-
+import '../components/products/ProductForms.css'
+import CategoryDropdown from '../components/products/CategoryDropdown'
 import { useState } from 'react'
 
 type Product = {
@@ -8,15 +9,6 @@ type Product = {
   price: number
   minimumStock: number
 }
-
-const categories = [
-  'Fruits',
-  'Vegetables',
-  'Dairy',
-  'Beverages',
-  'Bakery',
-  'Other',
-]
 
 function ProductManagement() {
   const [products, setProducts] = useState<Product[]>([])
@@ -214,26 +206,12 @@ function ProductManagement() {
                   required
                 />
               </div>
-
-              <div className="form-field">
-                <label htmlFor="productCategory">Category</label>
-                <select
-                  id="productCategory"
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  required
-                >
-                  <option value="" disabled>
-                    Select category
-                  </option>
-
-                  {categories.map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <CategoryDropdown
+                id="productCategory"
+                value={category}
+                onChange={setCategory}
+                required
+              />
 
               <div className="form-field">
                 <label htmlFor="productPrice">Price (LKR)</label>
