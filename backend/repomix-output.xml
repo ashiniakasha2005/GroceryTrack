@@ -40,28 +40,20 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
-config/
-  db.ts
-controllers/
-  authController.ts
-  productController.ts
-middleware/
-  authMiddleware.ts
-models/
-  userModel.ts
-routes/
-  authRoutes.ts
-  ca (1).pem
-  productRoutes.ts
 src/
   config/
     db.ts
   controllers/
     authController.ts
+    productController.ts
+  middleware/
+    authMiddleware.ts
   models/
     userModel.ts
   routes/
     authRoutes.ts
+    ca (1).pem
+    productRoutes.ts
   scripts/
     checkTables.ts
     createTestUser.ts
@@ -78,7 +70,7 @@ tsconfig.json
 <files>
 This section contains the contents of the repository's files.
 
-<file path="config/db.ts">
+<file path="src/config/db.ts">
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import fs from 'fs';
@@ -86,10 +78,11 @@ import path from 'path';
 
 dotenv.config();
 
-// SSL Certificate එක read කිරීම
+// Read SSL Certificate securely
 const sslCaPath = process.env.DB_SSL_CA || './ca.pem';
-const sslCert = fs.existsSync(sslCaPath) 
-  ? fs.readFileSync(path.resolve(sslCaPath)) 
+const resolvedCaPath = path.resolve(__dirname, '../../', sslCaPath);
+const sslCert = fs.existsSync(resolvedCaPath) 
+  ? fs.readFileSync(resolvedCaPath) 
   : undefined;
 
 export const pool = mysql.createPool({
@@ -97,15 +90,15 @@ export const pool = mysql.createPool({
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'grocerytrack',
-  port: Number(process.env.DB_PORT) || 3306, // Port එක .env එකෙන් ගන්න
-  ssl: sslCert ? { ca: sslCert, rejectUnauthorized: true } : undefined, // SSL Config
+  port: Number(process.env.DB_PORT) || 3306,
+  ssl: sslCert ? { ca: sslCert, rejectUnauthorized: true } : undefined,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
-});
+} as mysql.PoolOptions);
 </file>
 
-<file path="controllers/authController.ts">
+<file path="src/controllers/authController.ts">
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -172,7 +165,7 @@ export const logout = async (req: Request, res: Response) => {
 };
 </file>
 
-<file path="controllers/productController.ts">
+<file path="src/controllers/productController.ts">
 import { Request, Response } from 'express';
 import { pool } from '../config/db';
 
@@ -236,10 +229,10 @@ export const createProduct = async (req: Request, res: Response) => {
 };
 </file>
 
-<file path="middleware/authMiddleware.ts">
+<file path="src/middleware/authMiddleware.ts">
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { tokenBlacklist } from '../controllers/authController'; // authController එකෙන් blacklist එක import කරගන්න
+export const tokenBlacklist: string[] = [];
 
 interface JwtPayload {
   userId: number;
@@ -290,7 +283,7 @@ export function authorizeRoles(...allowedRoles: string[]) {
 }
 </file>
 
-<file path="models/userModel.ts">
+<file path="src/models/userModel.ts">
 import { pool } from '../config/db';
 import { RowDataPacket } from 'mysql2';
 
@@ -311,7 +304,7 @@ export async function findUserByIdentifier(identifier: string): Promise<User | n
 }
 </file>
 
-<file path="routes/authRoutes.ts">
+<file path="src/routes/authRoutes.ts">
 import { Router, Response } from 'express';
 import { authenticateToken, authorizeRoles, AuthRequest } from '../middleware/authMiddleware';
 import { login, logout } from '../controllers/authController';
@@ -337,7 +330,7 @@ router.get(
 export default router;
 </file>
 
-<file path="routes/ca (1).pem">
+<file path="src/routes/ca (1).pem">
 -----BEGIN CERTIFICATE-----
 MIIERDCCAqygAwIBAgIUNSNhEHWL+29MUGJGCT1SURgRZ8QwDQYJKoZIhvcNAQEM
 BQAwOjE4MDYGA1UEAwwvMzM0MzBkNjUtYzc5Yy00MWQxLWFjNTYtMzZjODU3ZDY2
@@ -365,119 +358,15 @@ cEybTXtdj/sSu4U2OkAMx8HsnMHzjMeI4w5HU4XqEQhj0DGt/SpjsgFMm72kuovo
 -----END CERTIFICATE-----
 </file>
 
-<file path="routes/productRoutes.ts">
+<file path="src/routes/productRoutes.ts">
 import { Router } from 'express';
-import { createProduct, updateProduct } from '../controllers/productController';
+import { createProduct } from '../controllers/productController';
 import { authenticateToken, authorizeRoles } from '../middleware/authMiddleware';
-import { validateProductCategory } from '../middleware/categoryMiddleware';
 
 const router = Router();
 
-// Route to create a new product with admin authorization and category validation
-router.post('/', authenticateToken, authorizeRoles('admin'), validateProductCategory, createProduct);
-
-// Route to update an existing product with admin authorization and category validation
-router.put('/:id', authenticateToken, authorizeRoles('admin'), validateProductCategory, updateProduct);
-
-export default router;
-</file>
-
-<file path="src/config/db.ts">
-import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
-
-dotenv.config();
-
-export const pool = mysql.createPool({
-  host: process.env.DB_HOST as string,
-  port: Number(process.env.DB_PORT),
-  user: process.env.DB_USER as string,
-  password: process.env.DB_PASSWORD as string,
-  database: process.env.DB_NAME as string,
-  waitForConnections: true,
-  connectionLimit: 10,
-  ssl: {
-    ca: fs.readFileSync(path.join(__dirname, '../../ca.pem')),
-    rejectUnauthorized: true,
-  },
-});
-</file>
-
-<file path="src/controllers/authController.ts">
-import { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import { findUserByIdentifier } from '../models/userModel';
-
-export async function login(req: Request, res: Response) {
-  try {
-    const { identifier, password } = req.body;
-
-    if (!identifier || !password) {
-  return res.status(400).json({ message: 'Email/username and password required' });
-}
-
-    const user = await findUserByIdentifier(identifier);
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-
-   const signOptions = {
-    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
-    } as any;
-
-    const token = jwt.sign(
-  { userId: user.id, email: user.email, role: user.role },
-  process.env.JWT_SECRET as string,
-  signOptions
-);
-
-    return res.status(200).json({
-  message: 'Login successful',
-  token,
-  user: { id: user.id, email: user.email, role: user.role },
-});
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-}
-</file>
-
-<file path="src/models/userModel.ts">
-import { pool } from '../config/db';
-import { RowDataPacket } from 'mysql2';
-
-export interface User extends RowDataPacket {
-  id: number;
-  email: string;
-  username: string;
-  password_hash: string;
-  role: string;
-}
-
-export async function findUserByIdentifier(identifier: string): Promise<User | null> {
-  const [rows] = await pool.query<User[]>(
-    'SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1',
-    [identifier, identifier]
-  );
-  return rows.length > 0 ? rows[0]! : null;
-}
-</file>
-
-<file path="src/routes/authRoutes.ts">
-import { Router } from 'express';
-import { login } from '../controllers/authController';
-
-const router = Router();
-router.post('/login', login);
+// Route to create a new product with admin authorization
+router.post('/', authenticateToken, authorizeRoles('admin'), createProduct);
 
 export default router;
 </file>
@@ -533,13 +422,16 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
+import productRoutes from './routes/productRoutes'; // Product routes එක එකතු කරන්න
 
 dotenv.config();
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
 app.use('/api/auth', authRoutes);
+app.use('/api', productRoutes); // Product API routes
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
@@ -584,51 +476,33 @@ DB_SSL_CA=./ca.pem
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "GroceryTrack backend API",
+  "main": "dist/app.js",
   "scripts": {
-
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "ts-node-dev server.ts"
-
     "dev": "tsx watch src/app.ts",
+    "build": "tsc",
+    "start": "node dist/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
-
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
-
-    "dotenv": "^17.4.2",
-
     "dotenv": "^18.0.3",
-
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mysql2": "^3.24.4"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
-
-    "@types/express": "^5.0.6",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^22.20.4",
-    "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.3.3"
-
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.2",
-    "ts-node-dev": "^2.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
-
   }
 }
 </file>
