@@ -1,4 +1,3 @@
-import CategoryManagement from './pages/CategoryManagement'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import Dashboard from './pages/Dashboard'
@@ -6,11 +5,12 @@ import StaffManagement from './pages/StaffManagement'
 import ProductManagement from './pages/ProductManagement'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
+import CategoryManagement from './pages/CategoryManagement'
 
 function ProtectedRoute() {
-  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
+  const token = localStorage.getItem('token')
 
-  return isLoggedIn ? <AppShell /> : <Navigate to="/login" replace />
+  return token ? <AppShell /> : <Navigate to="/login" replace />
 }
 
 function App() {
