@@ -1,4 +1,4 @@
-
+import CategoryManagement from './pages/CategoryManagement'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import Dashboard from './pages/Dashboard'
@@ -24,6 +24,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/staff" element={<StaffManagement />} />
         <Route path="/products" element={<ProductManagement />} />
+        <Route path="/categories" element={<CategoryManagement />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
