@@ -89,10 +89,10 @@ function validate(
   if (!username) {
     errors.username = "Username is required.";
   } else if (
-    !/^(?=.{4,20}$)[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/.test(username)
+    !/^(?=.{4,20}$)[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*$/.test(username)
   ) {
     errors.username =
-      "Username must be 4–20 characters (letters, numbers, . _ - only).";
+      "Username must be 4–20 characters and start with a letter.";
   }
 
   // Email validation
