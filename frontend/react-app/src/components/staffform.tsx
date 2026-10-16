@@ -204,21 +204,7 @@ export function StaffForm({
     setFormError("");
   }, [mode, staff?.id, staff?.fullName, staff?.username, staff?.email]);
 
-  useEffect(() => {
-  const fontId = "staff-form-inter-font";
-
-  if (!document.getElementById(fontId)) {
-    const link = document.createElement("link");
-    link.id = fontId;
-    link.rel = "stylesheet";
-    link.href =
-      "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap";
-
-    document.head.appendChild(link);
-  }
-}, []);
-
-function getDuplicateErrors(nextValues: FormValues): FormErrors {
+  function getDuplicateErrors(nextValues: FormValues): FormErrors {
     const result: FormErrors = {};
     const username = normalizeUsername(nextValues.username);
     const email = normalizeEmail(nextValues.email);
