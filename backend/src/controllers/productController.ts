@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { pool } from '../config/db';
+import { RowDataPacket } from 'mysql2';
 
 export const createProduct = async (req: Request, res: Response) => {
     try {
@@ -14,6 +15,18 @@ export const createProduct = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'A valid category_id is required.' });
         }
 
+        // 1. අදාළ category_id එක ඩේටබේස් එකේ පවතිදැයි පරීක්ෂා කිරීම (Existence Check)
+        const [categoryRows] = await pool.execute<RowDataPacket[]>(
+            'SELECT category_id FROM categories WHERE category_id = ?', 
+            [category_id]
+        );
+
+        if (categoryRows.length === 0) {
+            return res.status(400).json({
+                message: 'Validation error: The provided category ID does not exist.'
+            });
+        }
+
         if (price === undefined || isNaN(Number(price)) || Number(price) < 0) {
             return res.status(400).json({ message: 'Price must be a valid non-negative number.' });
         }
@@ -25,7 +38,7 @@ export const createProduct = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Stock levels cannot be negative numbers.' });
         }
 
-        // Database Query with updated column name: minimum_stock
+        // Database Query
         const query = `
             INSERT INTO products (product_name, category_id, price, minimum_stock, current_stock)
             VALUES (?, ?, ?, ?, ?)
