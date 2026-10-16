@@ -19,16 +19,20 @@ function AppShell() {
   }
 
   const getPageTitle = () => {
-    if (location.pathname === '/staff') {
-      return 'Staff Management'
-    }
-
-    if (location.pathname === '/dashboard') {
-      return 'Dashboard'
-    }
-
-    return 'GroceryTrack'
+  if (location.pathname === '/staff') {
+    return 'Staff Management'
   }
+
+  if (location.pathname === '/dashboard') {
+    return 'Dashboard'
+  }
+
+  if (location.pathname === '/products') {
+    return 'Product Management'
+  }
+
+  return 'GroceryTrack'
+}
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -95,6 +99,10 @@ function AppShell() {
               </svg>
 
               <span>Dashboard</span>
+            </NavLink>
+                        {/* Product Management */}
+            <NavLink to="/products" className={navLinkClass}>
+              <span>Product Management</span>
             </NavLink>
 
             {/* Sales / POS */}
