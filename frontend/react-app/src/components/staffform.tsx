@@ -8,9 +8,6 @@ export type StaffMember = {
   fullName: string;
   username: string;
   email: string;
-
-  role?: string;
-
   status?: StaffStatus;
 };
 
@@ -34,9 +31,7 @@ type StaffFormProps = {
   onSubmit: (
     values: Omit<FormValues, "password"> & {
       password?: string;
-
-      role?: "Staff";
-
+      role: "Staff";
       id?: string;
     }
   ) => Promise<void> | void;
@@ -56,9 +51,7 @@ function getInitialValues(
   if (mode === "edit" && staff) {
     return {
       fullName: staff.fullName,
-
-      username: staff.username.replace(/^@/, ""),
-
+      username: staff.username,
       email: staff.email,
       password: "",
     };
@@ -67,18 +60,16 @@ function getInitialValues(
   return { ...emptyValues };
 }
 
-
-function normalizeUsername(value: string) {
-  return value.trim().replace(/^@/, "").toLowerCase();
-}
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
+type DuplicateContext = {
+  staff?: StaffMember;
+  existingUsernames: string[];
+  existingEmails: string[];
+};
 
 function validate(
   values: FormValues,
-  mode: StaffFormProps["mode"]
+  mode: StaffFormProps["mode"],
+  ctx: DuplicateContext
 ): FormErrors {
   const errors: FormErrors = {};
 
@@ -96,35 +87,46 @@ function validate(
   // Username validation
   if (!username) {
     errors.username = "Username is required.";
-  } 
-  else if (
-
+  } else if (
     !/^(?=.{4,20}$)[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*$/.test(
       username
     )
   ) {
     errors.username =
-      "Username must be 4–20 characters and start with a letter.";
-    } else if (
-
-    !/^(?=.{4,20}$)[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/.test(username)
-  ) {
-    errors.username =
-      "Username must be 4–20 characters (letters, numbers, . _ - only).";
-
+      "Username must be 4–20 characters, start with a letter, and use only letters, numbers, or . _ - between characters.";
   }
 
   // Email validation
   const emailRegex =
-
     /^[^\s@]+@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
-
-
 
   if (!email) {
     errors.email = "Email address is required.";
   } else if (!emailRegex.test(email)) {
     errors.email = "Enter a valid email address.";
+  }
+
+  // Duplicate checks. In edit mode the member's own current values are allowed.
+  if (!errors.username) {
+    const normalized = username.toLowerCase();
+    const current = ctx.staff?.username.trim().toLowerCase();
+    const isDuplicate = ctx.existingUsernames.some(
+      (u) => u.trim().toLowerCase() === normalized
+    );
+    if (isDuplicate && !(mode === "edit" && current === normalized)) {
+      errors.username = "Username already in use.";
+    }
+  }
+
+  if (!errors.email) {
+    const normalized = email.toLowerCase();
+    const current = ctx.staff?.email.trim().toLowerCase();
+    const isDuplicate = ctx.existingEmails.some(
+      (e) => e.trim().toLowerCase() === normalized
+    );
+    if (isDuplicate && !(mode === "edit" && current === normalized)) {
+      errors.email = "Email already in use.";
+    }
   }
 
   // Password validation
@@ -133,9 +135,8 @@ function validate(
   if (mode === "add" && !values.password) {
     errors.password = "Password is required.";
   } else if (
-
-    values.password && !/^(?=.*\d).{8,}$/.test(values.password)
-
+    values.password &&
+    !/^(?=.*\d).{8,}$/.test(values.password)
   ) {
     errors.password =
       "Password must be at least 8 characters and contain a number.";
@@ -167,36 +168,36 @@ export function StaffForm({
   const [successMessage, setSuccessMessage] = useState("");
   const [formError, setFormError] = useState("");
 
-
-
   const titleId = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const submittingRef = useRef(false);
- 
+
+  // Keep latest values for the document-level key handler (the effect that
+  // registers it only runs once, so it would otherwise see stale props).
+  const isSubmittingRef = useRef(isSubmitting);
+  const onCloseRef = useRef(onClose);
+  isSubmittingRef.current = isSubmitting;
+  onCloseRef.current = onClose;
+
+  function runValidation(vals: FormValues) {
+    return validate(vals, mode, { staff, existingUsernames, existingEmails });
+  }
 
   useEffect(() => {
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
 
     const dialogNode = dialogRef.current;
-    const focusable = dialogNode?.querySelectorAll<HTMLElement>(
-      'button, input, [href], select, textarea, [tabindex]:not([tabindex="-1"])'
+    // Focus the first form field rather than the close button.
+    const firstField = dialogNode?.querySelector<HTMLElement>(
+      "input:not([disabled])"
     );
-
-
- 
-
-
-    (
-      dialogNode?.querySelector<HTMLElement>("input:not([disabled])") ??
-      focusable?.[0]
-
-    )?.focus();
-    
+    const fallback = dialogNode?.querySelector<HTMLElement>("button");
+    (firstField ?? fallback)?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !isSubmitting) {
-        onClose();
+      if (event.key === "Escape" && !isSubmittingRef.current) {
+        onCloseRef.current();
         return;
       }
 
@@ -204,7 +205,6 @@ export function StaffForm({
         const focusableEls = dialogNode.querySelectorAll<HTMLElement>(
           'button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
         );
-
         if (focusableEls.length === 0) return;
 
         const first = focusableEls[0];
@@ -226,7 +226,6 @@ export function StaffForm({
       document.removeEventListener("keydown", handleKeyDown);
       previouslyFocusedRef.current?.focus();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -239,7 +238,6 @@ export function StaffForm({
   }, [mode, staff?.id, staff?.fullName, staff?.username, staff?.email]);
 
   useEffect(() => {
-
     const fontId = "staff-form-inter-font";
 
     if (!document.getElementById(fontId)) {
@@ -253,55 +251,6 @@ export function StaffForm({
     }
   }, []);
 
-  const fontId = "staff-form-inter-font";
-
-  if (!document.getElementById(fontId)) {
-    const link = document.createElement("link");
-    link.id = fontId;
-    link.rel = "stylesheet";
-    link.href =
-      "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap";
-
-    document.head.appendChild(link);
-  }
-}, []);
-
-function getDuplicateErrors(nextValues: FormValues): FormErrors {
-    const result: FormErrors = {};
-    const username = normalizeUsername(nextValues.username);
-    const email = normalizeEmail(nextValues.email);
-    const currentUsername = staff ? normalizeUsername(staff.username) : "";
-    const currentEmail = staff ? normalizeEmail(staff.email) : "";
-
-    if (
-      username &&
-      existingUsernames.some((item) => normalizeUsername(item) === username) &&
-      !(mode === "edit" && currentUsername === username)
-    ) {
-      result.username = "Username already in use";
-    }
-
-    if (
-      email &&
-      existingEmails.some((item) => normalizeEmail(item) === email) &&
-      !(mode === "edit" && currentEmail === email)
-    ) {
-      result.email = "Email already in use";
-    }
-
-    return result;
-}
-
-  function getAllErrors(nextValues: FormValues): FormErrors {
-    const formatErrors = validate(nextValues, mode);
-    const duplicateErrors = getDuplicateErrors(nextValues);
-
-    if (formatErrors.username) delete duplicateErrors.username;
-    if (formatErrors.email) delete duplicateErrors.email;
-
-    return { ...formatErrors, ...duplicateErrors };
-  }
-
   function updateField(field: keyof FormValues, value: string) {
     setFormError("");
     setSuccessMessage("");
@@ -314,97 +263,25 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
     setValues(nextValues);
 
     if (touched[field]) {
-
-      setErrors(validate(nextValues, mode));
-    }
-  }
-
-  function handleBlur(field: keyof FormValues) {
-    const nextTouched = {
-      ...touched,
-      [field]: true,
-    };
-
-    setTouched(nextTouched);
-    setErrors(validate(values, mode));
-  }
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError("");
-
-    const nextErrors = validate(values, mode);
-
-    const normalizedUsername = values.username.trim().toLowerCase();
-    const normalizedEmail = values.email.trim().toLowerCase();
-
-    /*
-     * Duplicate username validation
-     *
-     * Count how many existing staff accounts use this username.
-     * If the count is greater than 1, it is definitely duplicated.
-     *
-     * In edit mode, if the count is exactly 1 and it belongs to the
-     * current staff member, keeping the same username is allowed.
-     */
-    const matchingUsernames = existingUsernames.filter(
-      (username) =>
-        username.trim().toLowerCase() === normalizedUsername
-    );
-
-    const usernameIsDuplicate =
-      matchingUsernames.length > 1 ||
-      (matchingUsernames.length === 1 &&
-        !(mode === "edit" &&
-          staff?.username.trim().toLowerCase() === normalizedUsername));
-
-    if (usernameIsDuplicate) {
-      nextErrors.username = "Username already in use.";
-    }
-
-    /*
-     * Duplicate email validation
-     *
-     * Count how many existing staff accounts use this email.
-     * If the count is greater than 1, it is definitely duplicated.
-     *
-     * In edit mode, if the count is exactly 1 and it belongs to the
-     * current staff member, keeping the same email is allowed.
-     */
-    const matchingEmails = existingEmails.filter(
-      (email) => email.trim().toLowerCase() === normalizedEmail
-    );
-
-    const emailIsDuplicate =
-      matchingEmails.length > 1 ||
-      (matchingEmails.length === 1 &&
-        !(mode === "edit" &&
-          staff?.email.trim().toLowerCase() === normalizedEmail));
-
-    if (emailIsDuplicate) {
-      nextErrors.email = "Email already in use.";
-    }
-
-
-      setErrors(getAllErrors(nextValues));
+      setErrors(runValidation(nextValues));
     }
   }
 
   // Validate current form values on blur.
   // onChange updates values immediately, so no separate latestValue is needed.
   function handleBlur(field: keyof FormValues) {
-    setTouched((previous) => ({ ...previous, [field]: true }));
-    setErrors(getAllErrors(values));
+    setTouched((prev) => ({ ...prev, [field]: true }));
+    setErrors(runValidation(values));
   }
-  
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isSubmitting || submittingRef.current) return;
- 
     setFormError("");
-    setSuccessMessage("");
- 
-    const nextErrors = getAllErrors(values);
+
+    if (submittingRef.current || isSubmitting) return;
+
+    const nextErrors = runValidation(values);
+    const normalizedEmail = values.email.trim().toLowerCase();
 
     setErrors(nextErrors);
 
@@ -420,7 +297,6 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
     }
 
     submittingRef.current = true;
-     
     try {
       const { password, ...rest } = values;
 
@@ -428,15 +304,8 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
         ...rest,
         fullName: rest.fullName.trim(),
         username: rest.username.trim(),
-
         email: normalizedEmail,
         role: "Staff" as const,
-
-        email: normalizeEmail(rest.email),
-        // New accounts are always "Staff". When editing, no role is sent,
-        // so the existing role (for example Cashier) is kept.
-        ...(mode === "add" ? { role: "Staff" as const } : {}),
-
         ...(mode === "edit" && staff ? { id: staff.id } : {}),
         ...(mode === "edit" && !password ? {} : { password }),
       };
@@ -446,47 +315,29 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
       if (mode === "add") {
         setValues({ ...emptyValues });
       }
-
-
-
       setErrors({});
       setTouched({});
       setShowPassword(false);
 
       setSuccessMessage(
         mode === "add"
-
           ? "Staff account created."
           : "Staff account updated."
       );
     } catch (err: unknown) {
-
-          ? "Staff account created successfully."
-          : "Staff account updated successfully."
-      );
-    } catch (err: unknown) {
       // Expects the backend integration to reject with a structured error,
       // e.g. { field: "username" | "email", message: string } for 409s.
-
       const apiError =
         typeof err === "object" && err !== null
           ? (err as { field?: string; message?: string })
           : undefined;
 
-
-      if (
-        apiError?.field === "username" ||
-        apiError?.field === "email"
-      ) {
-
       if (apiError?.field === "username" || apiError?.field === "email") {
-
         setErrors((prev) => ({
           ...prev,
           [apiError.field as "username" | "email"]:
             apiError.message ?? "This value is already in use.",
         }));
-
         setTouched((prev) => ({
           ...prev,
           [apiError.field as "username" | "email"]: true,
@@ -496,21 +347,19 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
           apiError?.message ?? "Something went wrong. Please try again."
         );
       }
-
-    }
-  }
-
-
     } finally {
       submittingRef.current = false;
     }
   }
-    
 
   if (!canManageStaff) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#212529]/50 p-4">
-        <section className="w-[420px] max-w-[calc(100vw-32px)] rounded-[10px] bg-white p-6 text-center shadow-[0_12px_48px_rgba(0,0,0,0.18)]">
+        <section
+          role="alertdialog"
+          aria-modal="true"
+          className="w-[420px] max-w-[calc(100vw-32px)] rounded-[10px] bg-white p-6 text-center shadow-[0_12px_48px_rgba(0,0,0,0.18)]"
+        >
           <p className="text-[13px] text-[#dc3545]">
             Only Admin users can manage staff accounts.
           </p>
@@ -544,20 +393,10 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
 
   return (
     <div
-
       className="fixed inset-0 z-50 flex items-center justify-center bg-[#212529]/50 p-4 font-['Inter']"
       role="presentation"
       onMouseDown={(event) => {
-        if (
-          event.target === event.currentTarget &&
-          !isSubmitting
-        ) {
-
-       className="fixed inset-0 z-50 flex items-center justify-center bg-[#212529]/50 p-4 font-['Inter']"
-      role="presentation"
-      onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isSubmitting) {
-
           onClose();
         }
       }}
@@ -604,13 +443,7 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
         <form
           onSubmit={handleSubmit}
           noValidate
-
-          aria-describedby={
-            formError ? `${titleId}-form-error` : undefined
-          }
-
           aria-describedby={formError ? `${titleId}-form-error` : undefined}
-
           className="flex flex-1 flex-col"
         >
           <div className="flex-1 space-y-4 px-6 py-[22px]">
@@ -643,21 +476,10 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
               disabled={isSubmitting}
               value={values.fullName}
               placeholder="e.g. Juan dela Cruz"
-
-              error={
-                touched.fullName ? errors.fullName : undefined
-              }
-              errorId={errorId("fullName")}
-              inputClassName={fieldClass("fullName")}
-              onChange={(value) =>
-                updateField("fullName", value)
-              }
-
               error={touched.fullName ? errors.fullName : undefined}
               errorId={errorId("fullName")}
               inputClassName={fieldClass("fullName")}
               onChange={(value) => updateField("fullName", value)}
-
               onBlur={() => handleBlur("fullName")}
             />
 
@@ -671,21 +493,10 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
                 disabled={isSubmitting}
                 value={values.username}
                 placeholder="e.g. j.delacruz"
-
-                error={
-                  touched.username ? errors.username : undefined
-                }
-                errorId={errorId("username")}
-                inputClassName={fieldClass("username")}
-                onChange={(value) =>
-                  updateField("username", value)
-                }
-
                 error={touched.username ? errors.username : undefined}
                 errorId={errorId("username")}
                 inputClassName={fieldClass("username")}
                 onChange={(value) => updateField("username", value)}
-
                 onBlur={() => handleBlur("username")}
               />
 
@@ -703,11 +514,7 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
                   value="Staff"
                   readOnly
                   disabled
-
                   className="h-[38px] w-full cursor-not-allowed rounded-[6px] border border-[#dee2e6] bg-[#f8f9fa] px-3 text-[13px] font-['Inter'] leading-none text-[#343a40] opacity-100"
-
-                  className="h-[38px] w-full cursor-not-allowed rounded-[6px] border border-[#dee2e6] bg-[#f8f9fa] px-3 text-[13px] font-['Inter'] leading-none text-[#343a40] opacity-100"         
-
                 />
               </div>
             </div>
@@ -722,21 +529,10 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
               type="email"
               value={values.email}
               placeholder="e.g. juan.delacruz@grocerytrack.com"
-
-              error={
-                touched.email ? errors.email : undefined
-              }
-              errorId={errorId("email")}
-              inputClassName={fieldClass("email")}
-              onChange={(value) =>
-                updateField("email", value)
-              }
-
               error={touched.email ? errors.email : undefined}
               errorId={errorId("email")}
               inputClassName={fieldClass("email")}
               onChange={(value) => updateField("email", value)}
-
               onBlur={() => handleBlur("email")}
             />
 
@@ -765,7 +561,7 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
                       ? "Set a password"
                       : "Leave blank to keep current password"
                   }
-                  autoComplete="off"
+                  autoComplete="new-password"
                   aria-invalid={Boolean(
                     touched.password && errors.password
                   )}
@@ -783,25 +579,13 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
 
                 <button
                   type="button"
-
-                  onMouseDown={(event) =>
-                    event.preventDefault()
-                  }
-
                   onMouseDown={(event) => event.preventDefault()}
-
                   onClick={() =>
                     setShowPassword((visible) => !visible)
                   }
                   disabled={isSubmitting}
                   aria-label={
-
-                    showPassword
-                      ? "Hide password"
-                      : "Show password"
-
                     showPassword ? "Hide password" : "Show password"
-
                   }
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[#adb5bd] transition hover:text-[#495057] disabled:cursor-not-allowed disabled:opacity-60"
                 >
@@ -833,21 +617,12 @@ function getDuplicateErrors(nextValues: FormValues): FormErrors {
               Cancel
             </button>
 
-
             <button
               type="submit"
               disabled={isSubmitting}
               className="inline-flex h-[37.1px] w-[131px] shrink-0 items-center justify-center whitespace-nowrap rounded-[6px] bg-[#0d6efd] px-[22px] py-0 text-center font-['Inter'] text-[13px] font-semibold leading-[19.5px] tracking-[0px] text-white transition hover:bg-[#0b5ed7] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSubmitting
-
-           <button
-            type="submit"
-            disabled={isSubmitting}
-            className="inline-flex h-[37.1px] w-[131px] shrink-0 items-center justify-center whitespace-nowrap rounded-[6px] bg-[#0d6efd] px-[22px] py-0 text-center font-['Inter'] text-[13px] font-semibold leading-[19.5px] tracking-[0px] text-white transition hover:bg-[#0b5ed7] disabled:cursor-not-allowed disabled:opacity-60"
-            >
             {isSubmitting
-
                 ? "Saving…"
                 : mode === "add"
                 ? "Save Account"
@@ -900,13 +675,7 @@ function Field({
         className="mb-[5px] block text-left text-[12px] font-semibold leading-[18px] text-[#495057]"
       >
         {label}{" "}
-
-        {required && (
-          <span className="text-[#dc3545]">*</span>
-        )}
-
         {required && <span className="text-[#dc3545]">*</span>}
-
       </label>
 
       <input
@@ -981,10 +750,6 @@ function AlertIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="2.5"
-
-      strokeLinecap="round"
-      strokeLinejoin="round"
-
     >
       <circle cx="12" cy="12" r="10" />
       <path d="M12 8v4M12 16h.01" />
