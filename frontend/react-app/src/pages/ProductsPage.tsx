@@ -1,5 +1,7 @@
 import ProductCatalogView from '../components/products/ProductCatalogView'
 import type { Product } from '../types/product'
+import { useState } from "react";
+import SearchBar from "../components/SearchBar";
 
 // Sample data copied from the Figma design, until real data is connected
 const sampleProducts: Product[] = [
@@ -13,14 +15,34 @@ const sampleProducts: Product[] = [
 ]
 
 function ProductsPage() {
+  const [search, setSearch] = useState("");
+
+  const filteredProducts = sampleProducts.filter((product) =>
+    product.name.toLowerCase().includes(search.trim().toLowerCase())
+  );
+
   return (
-    <ProductCatalogView
-      products={sampleProducts}
-      onAdd={() => console.log('add')}
-      onEdit={(product) => console.log('edit', product)}
-      onDelete={(product) => console.log('delete', product)}
-    />
-  )
+    <div className="space-y-4">
+      <SearchBar
+        value={search}
+        onChange={setSearch}
+        placeholder="Search products..."
+      />
+
+      {filteredProducts.length === 0 ? (
+        <p className="py-8 text-center text-gray-500">
+          No products found
+        </p>
+      ) : (
+        <ProductCatalogView
+          products={filteredProducts}
+          onAdd={() => console.log("add")}
+          onEdit={(product) => console.log("edit", product)}
+          onDelete={(product) => console.log("delete", product)}
+        />
+      )}
+    </div>
+  );
 }
 
-export default ProductsPage
+export default ProductsPage;
