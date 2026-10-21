@@ -26,6 +26,9 @@ function AppShell() {
     if (location.pathname === '/dashboard') {
       return 'Dashboard'
     }
+    if (location.pathname === '/inventory') {
+    return 'Inventory Management'
+    }
 
     return 'GroceryTrack'
   }
