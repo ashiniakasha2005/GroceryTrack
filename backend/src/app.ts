@@ -12,6 +12,9 @@ app.use(express.json());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes); // මෙතන 'products' ලෙස නිවැරදි කරන්න
+import categoryRoutes from './routes/categoryRoutes';
+// ...
+app.use('/api/categories', categoryRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

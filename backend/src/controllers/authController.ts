@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { findUserByIdentifier } from '../models/userModel';
+export const tokenBlacklist: string[] = [];
 
 // In-memory array to store blacklisted tokens after logout
 export const tokenBlacklist: string[] = [];

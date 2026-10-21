@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-export const tokenBlacklist: string[] = [];
+import { tokenBlacklist } from '../controllers/authController'; // authController එකෙන් blacklist එක import කරගන්න
 
 interface JwtPayload {
   userId: number;
