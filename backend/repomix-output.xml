@@ -63,6 +63,7 @@ types/
 .env.example
 API
 package.json
+package.json.backup
 server.ts
 tsconfig.json
 </directory_structure>

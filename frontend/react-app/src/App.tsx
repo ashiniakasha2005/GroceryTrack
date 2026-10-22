@@ -7,6 +7,7 @@ import ProductsPage from './pages/ProductsPage'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import CategoryManagement from './pages/CategoryManagement'
+import ProductManagement from './pages/ProductManagement'
 
 function ProtectedRoute() {
   const token = localStorage.getItem('token')
@@ -27,6 +28,7 @@ function App() {
         <Route path="/staff" element={<StaffManagement />} />
         <Route path="/products" element={<ProductManagement />} />
         <Route path="/categories" element={<CategoryManagement />} />
+        <Route path="/products" element={<ProductManagement />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
