@@ -2,6 +2,10 @@ import ProductCatalogView from '../components/products/ProductCatalogView'
 import type { Product } from '../types/product'
 import { useState } from "react";
 import SearchBar from "../components/SearchBar";
+import AddProductForm from '../components/products/AddProductForm'
+import type { ProductFormData } from '../components/products/AddProductForm'
+import EditProductForm from '../components/products/EditProductForm'
+import DeleteProductModal from '../components/products/DeleteProductModal'
 
 // Sample data copied from the Figma design, until real data is connected
 const sampleProducts: Product[] = [
@@ -17,9 +21,57 @@ const sampleProducts: Product[] = [
 function ProductsPage() {
   const [search, setSearch] = useState("");
 
-  const filteredProducts = sampleProducts.filter((product) =>
+  const [products, setProducts] = useState<Product[]>(sampleProducts);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+
+  const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(search.trim().toLowerCase())
   );
+
+  function handleAdd(data: ProductFormData) {
+    setProducts((prev) => [
+      ...prev,
+      {
+        id: Math.max(0, ...prev.map((p) => p.id)) + 1,
+        name: data.name,
+        categoryName: data.category,
+        price: data.price,
+        currentStock: data.currentStock,
+        minStockLevel: data.minimumStock,
+        unit: data.unit,
+      } as Product,
+    ]);
+    setShowAdd(false);
+  }
+
+  // NEW: Edit save
+  function handleEditSave(data: ProductFormData) {
+    if (!editingProduct) return;
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === editingProduct.id
+          ? ({
+              ...p,
+              name: data.name,
+              categoryName: data.category,
+              price: data.price,
+              currentStock: data.currentStock,
+              minStockLevel: data.minimumStock,
+              unit: data.unit,
+            } as Product)
+          : p
+      )
+    );
+    setEditingProduct(null);
+  }
+
+  function handleConfirmDelete() {
+    if (!deletingProduct) return;
+    setProducts((prev) => prev.filter((p) => p.id !== deletingProduct.id));
+    setDeletingProduct(null);
+  }
 
   return (
     <div className="space-y-4">
@@ -36,9 +88,40 @@ function ProductsPage() {
       ) : (
         <ProductCatalogView
           products={filteredProducts}
-          onAdd={() => console.log("add")}
-          onEdit={(product) => console.log("edit", product)}
-          onDelete={(product) => console.log("delete", product)}
+          onAdd={() => setShowAdd(true)}
+          onEdit={(product) => setEditingProduct(product)}
+          onDelete={(product) => setDeletingProduct(product)}
+        />
+      )}
+
+      {showAdd && (
+        <AddProductForm
+          onSave={handleAdd}
+          onCancel={() => setShowAdd(false)}
+        />
+      )}
+
+      {/* NEW: Edit modal */}
+      {editingProduct && (
+        <EditProductForm
+          product={{
+            name: editingProduct.name,
+            category: editingProduct.categoryName,
+            unit: editingProduct.unit ?? 'pcs',
+            price: editingProduct.price,
+            currentStock: editingProduct.currentStock,
+            minimumStock: editingProduct.minStockLevel,
+          }}
+          onSave={handleEditSave}
+          onCancel={() => setEditingProduct(null)}
+        />
+      )}
+
+      {deletingProduct && (
+        <DeleteProductModal
+          productName={deletingProduct.name}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeletingProduct(null)}
         />
       )}
     </div>
