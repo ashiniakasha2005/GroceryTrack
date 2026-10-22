@@ -23,9 +23,12 @@ function AppShell() {
     return 'Staff Management'
   }
 
-  if (location.pathname === '/dashboard') {
-    return 'Dashboard'
-  }
+    if (location.pathname === '/dashboard') {
+      return 'Dashboard'
+    }
+    if (location.pathname === '/inventory') {
+    return 'Inventory Management'
+    }
 
   if (location.pathname === '/products') {
     return 'Product Management'
