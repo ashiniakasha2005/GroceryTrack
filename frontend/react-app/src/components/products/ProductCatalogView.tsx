@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Product } from '../../types/product'
 import { isLowStock } from '../../utils/stock'
+import { formatPrice } from '../../utils/currency'
 import StockStatusBadge from './StockStatusBadge'
 
 type ProductCatalogViewProps = {
@@ -13,12 +14,6 @@ type ProductCatalogViewProps = {
   onEdit: (product: Product) => void
   onDelete: (product: Product) => void
 }
-
-const formatPrice = (price: number) =>
-  `₱ ${price.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
 
 const formatQty = (qty: number, unit?: string) =>
   unit ? `${qty} ${unit}` : `${qty}`
