@@ -5,16 +5,21 @@ import path from 'path';
 
 dotenv.config();
 
+// Read SSL Certificate securely
+const sslCaPath = process.env.DB_SSL_CA || './ca.pem';
+const resolvedCaPath = path.resolve(__dirname, '../../', sslCaPath);
+const sslCert = fs.existsSync(resolvedCaPath) 
+  ? fs.readFileSync(resolvedCaPath) 
+  : undefined;
+
 export const pool = mysql.createPool({
-  host: process.env.DB_HOST as string,
-  port: Number(process.env.DB_PORT),
-  user: process.env.DB_USER as string,
-  password: process.env.DB_PASSWORD as string,
-  database: process.env.DB_NAME as string,
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'grocerytrack',
+  port: Number(process.env.DB_PORT) || 3306,
+  ssl: sslCert ? { ca: sslCert, rejectUnauthorized: true } : undefined,
   waitForConnections: true,
   connectionLimit: 10,
-  ssl: {
-    ca: fs.readFileSync(path.join(__dirname, '../../ca.pem')),
-    rejectUnauthorized: true,
-  },
-});
+  queueLimit: 0
+} as mysql.PoolOptions);
