@@ -1,6 +1,6 @@
 import ProductCatalogView from '../components/products/ProductCatalogView'
 import type { Product } from '../types/product'
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SearchBar from "../components/SearchBar";
 import AddProductForm from '../components/products/AddProductForm'
 import type { ProductFormData } from '../components/products/AddProductForm'
@@ -18,13 +18,29 @@ const sampleProducts: Product[] = [
   { id: 7, name: 'Instant Noodles (pack)', categoryName: 'Canned & Dry', price: 12.5, currentStock: 7, minStockLevel: 20, unit: 'pcs' },
 ]
 
+const STORAGE_KEY = 'grocerytrack-products'
+
+function loadProducts(): Product[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    return saved ? JSON.parse(saved) : sampleProducts
+  } catch {
+    return sampleProducts
+  }
+}
+
 function ProductsPage() {
+  
   const [search, setSearch] = useState("");
 
-  const [products, setProducts] = useState<Product[]>(sampleProducts);
+  const [products, setProducts] = useState<Product[]>(loadProducts);
   const [showAdd, setShowAdd] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+
+  useEffect(() => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(products))
+  }, [products])
 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(search.trim().toLowerCase())
