@@ -1,0 +1,2060 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+src/
+  config/
+    db.ts
+  controllers/
+    authController.ts
+    categoryController.ts
+    productController.ts
+  middleware/
+    authMiddleware.ts
+  models/
+    userModel.ts
+  routes/
+    authRoutes.ts
+    categoryRoutes.ts
+    dashboardRoutes.ts
+    inventoryRoutes.ts
+    productRoutes.ts
+    reportRoutes.ts
+    salesRoutes.ts
+    staffRoutes.ts
+  scripts/
+    checkTables.ts
+    createTestUser.ts
+  app.ts
+types/
+  express.d.ts
+.env.example
+.gitignore
+ca.pem
+package.json
+tsconfig.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/config/db.ts">
+import dotenv from "dotenv";
+dotenv.config();
+
+import mysql from "mysql2/promise";
+import fs from "fs";
+import path from "path";
+
+const requiredEnv = [
+    "DB_HOST",
+    "DB_USER",
+    "DB_PASSWORD",
+    "DB_NAME",
+    "DB_SSL_CA"
+] as const;
+
+for (const key of requiredEnv) {
+    if (!process.env[key]) {
+        throw new Error(`Missing environment variable: ${key}`);
+    }
+}
+
+// ca.pem is expected in the backend root folder (next to package.json)
+const sslCaPath = path.resolve(process.cwd(), process.env.DB_SSL_CA as string);
+
+if (!fs.existsSync(sslCaPath)) {
+    throw new Error(`SSL certificate not found: ${sslCaPath}`);
+}
+
+export const pool = mysql.createPool({
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT ?? 3306),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    ssl: {
+        ca: fs.readFileSync(sslCaPath),
+        rejectUnauthorized: true
+    },
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
+
+pool.getConnection()
+    .then((connection) => {
+        console.log("MySQL connected successfully");
+        connection.release();
+    })
+    .catch((error: Error) => {
+        console.error("MySQL connection failed:", error.message);
+    });
+
+// Both import styles work:
+//   import pool from "../config/db";
+//   import { pool } from "../config/db";
+export default pool;
+</file>
+
+<file path="src/controllers/authController.ts">
+import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { findUserByIdentifier } from "../models/userModel";
+import { tokenBlacklist } from "../middleware/authMiddleware";
+
+// LOGIN (email OR username)
+export async function login(req: Request, res: Response) {
+    try {
+        // "identifier" is preferred; "email" is also accepted for the new frontend/API clients
+        const identifier = req.body.identifier ?? req.body.email;
+        const { password } = req.body;
+
+        if (!identifier || !password) {
+            return res.status(400).json({ message: "Email/username and password required" });
+        }
+
+        const user = await findUserByIdentifier(identifier);
+        if (!user) {
+            return res.status(401).json({ message: "Invalid credentials" });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return res.status(401).json({ message: "Invalid credentials" });
+        }
+
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            return res.status(500).json({ message: "JWT_SECRET is not configured" });
+        }
+
+        const signOptions = {
+            expiresIn: process.env.JWT_EXPIRES_IN || "1d",
+        } as any;
+
+        // Payload shape must match UserPayload in authMiddleware.ts
+        const token = jwt.sign(
+            { id: user.id, name: user.name, email: user.email, role: user.role },
+            jwtSecret,
+            signOptions
+        );
+
+        return res.status(200).json({
+            message: "Login successful",
+            token,
+            user: { id: user.id, name: user.name, email: user.email, role: user.role },
+        });
+    } catch (error) {
+        console.error("Login error:", error);
+        return res.status(500).json({ message: "Server error" });
+    }
+}
+
+// LOGOUT
+export const logout = async (req: Request, res: Response) => {
+    try {
+        const authHeader = req.headers.authorization;
+        const token = authHeader && authHeader.split(" ")[1];
+
+        if (token) {
+            tokenBlacklist.add(token);
+        }
+
+        return res.status(200).json({
+            message: "Logout successful. Token invalidated successfully."
+        });
+    } catch (error) {
+        return res.status(500).json({ message: "Server error during logout" });
+    }
+};
+</file>
+
+<file path="src/controllers/categoryController.ts">
+import { Request, Response } from "express";
+import db from "../config/db";
+
+// GET /api/categories
+export const getCategories = async (req: Request, res: Response) => {
+
+    try {
+
+        const [categories] = await db.execute<any>(
+            "SELECT category_id AS id, category_name AS name FROM categories ORDER BY category_id DESC"
+        );
+
+        res.json(categories);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get categories",
+            error: error.message
+        });
+    }
+};
+
+// GET /api/categories/:id
+export const getCategoryById = async (req: Request, res: Response) => {
+
+    try {
+
+        const [categories] = await db.execute<any>(
+            "SELECT category_id AS id, category_name AS name FROM categories WHERE category_id = ?",
+            [req.params.id]
+        );
+
+        if (categories.length === 0) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        res.json(categories[0]);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get category",
+            error: error.message
+        });
+    }
+};
+
+// POST /api/categories
+export const createCategory = async (req: Request, res: Response) => {
+
+    try {
+
+        const { name } = req.body;
+
+        if (!name) {
+            return res.status(400).json({
+                message: "Category name is required"
+            });
+        }
+
+        const [result] = await db.execute<any>(
+            "INSERT INTO categories (category_name) VALUES (?)",
+            [name]
+        );
+
+        res.status(201).json({
+            message: "Category created successfully",
+            categoryId: result.insertId
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to create category",
+            error: error.message
+        });
+    }
+};
+
+// PUT /api/categories/:id
+export const updateCategory = async (req: Request, res: Response) => {
+
+    try {
+
+        const { name } = req.body;
+
+        if (!name) {
+            return res.status(400).json({
+                message: "Category name is required"
+            });
+        }
+
+        const [result] = await db.execute<any>(
+            "UPDATE categories SET category_name = ? WHERE category_id = ?",
+            [name, req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        res.json({
+            message: "Category updated successfully"
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to update category",
+            error: error.message
+        });
+    }
+};
+
+// DELETE /api/categories/:id
+export const deleteCategory = async (req: Request, res: Response) => {
+
+    try {
+
+        const [result] = await db.execute<any>(
+            "DELETE FROM categories WHERE category_id = ?",
+            [req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        res.json({
+            message: "Category deleted successfully"
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to delete category",
+            error: error.message
+        });
+    }
+};
+</file>
+
+<file path="src/controllers/productController.ts">
+import { Request, Response } from "express";
+import db from "../config/db";
+
+// GET /api/products
+export const getProducts = async (req: Request, res: Response) => {
+
+    try {
+
+        const [products] = await db.execute<any>(`
+            SELECT
+                p.id,
+                p.name,
+                p.category_id,
+                c.category_name AS category,
+                p.price,
+                p.stock_quantity,
+                p.minimum_stock,
+                p.created_at
+            FROM products p
+            LEFT JOIN categories c
+                ON p.category_id = c.category_id
+            ORDER BY p.id DESC
+        `);
+
+        res.json(products);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get products",
+            error: error.message
+        });
+    }
+};
+
+// GET /api/products/search/:name
+export const searchProducts = async (req: Request, res: Response) => {
+
+    try {
+
+        const search = `%${req.params.name}%`;
+
+        const [products] = await db.execute<any>(`
+            SELECT
+                p.id,
+                p.name,
+                c.category_name AS category,
+                p.price,
+                p.stock_quantity,
+                p.minimum_stock
+            FROM products p
+            LEFT JOIN categories c
+                ON p.category_id = c.category_id
+            WHERE p.name LIKE ?
+        `, [search]);
+
+        res.json(products);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Search failed",
+            error: error.message
+        });
+    }
+};
+
+// GET /api/products/:id
+export const getProductById = async (req: Request, res: Response) => {
+
+    try {
+
+        const [products] = await db.execute<any>(`
+            SELECT
+                p.*,
+                c.category_name AS category
+            FROM products p
+            LEFT JOIN categories c
+                ON p.category_id = c.category_id
+            WHERE p.id = ?
+        `, [req.params.id]);
+
+        if (products.length === 0) {
+            return res.status(404).json({
+                message: "Product not found"
+            });
+        }
+
+        res.json(products[0]);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get product",
+            error: error.message
+        });
+    }
+};
+
+// POST /api/products
+export const createProduct = async (req: Request, res: Response) => {
+
+    try {
+
+        const {
+            name,
+            category_id,
+            price,
+            stock_quantity,
+            minimum_stock
+        } = req.body;
+
+        if (
+            !name ||
+            category_id === undefined ||
+            price === undefined
+        ) {
+            return res.status(400).json({
+                message: "Name, category_id and price are required"
+            });
+        }
+
+        const [result] = await db.execute<any>(`
+            INSERT INTO products
+            (name, category_id, price, stock_quantity, minimum_stock)
+            VALUES (?, ?, ?, ?, ?)
+        `, [
+            name,
+            category_id,
+            price,
+            stock_quantity ?? 0,
+            minimum_stock ?? 5
+        ]);
+
+        res.status(201).json({
+            message: "Product created successfully",
+            productId: result.insertId
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to create product",
+            error: error.message
+        });
+    }
+};
+
+// PUT /api/products/:id
+export const updateProduct = async (req: Request, res: Response) => {
+
+    try {
+
+        const {
+            name,
+            category_id,
+            price,
+            minimum_stock
+        } = req.body;
+
+        if (
+            !name ||
+            category_id === undefined ||
+            price === undefined ||
+            minimum_stock === undefined
+        ) {
+            return res.status(400).json({
+                message:
+                    "Name, category_id, price and minimum_stock are required"
+            });
+        }
+
+        const [result] = await db.execute<any>(`
+            UPDATE products
+            SET
+                name = ?,
+                category_id = ?,
+                price = ?,
+                minimum_stock = ?
+            WHERE id = ?
+        `, [
+            name,
+            category_id,
+            price,
+            minimum_stock,
+            req.params.id
+        ]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Product not found"
+            });
+        }
+
+        res.json({
+            message: "Product updated successfully"
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to update product",
+            error: error.message
+        });
+    }
+};
+
+// DELETE /api/products/:id
+export const deleteProduct = async (req: Request, res: Response) => {
+
+    try {
+
+        const [result] = await db.execute<any>(
+            "DELETE FROM products WHERE id = ?",
+            [req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Product not found"
+            });
+        }
+
+        res.json({
+            message: "Product deleted successfully"
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to delete product",
+            error: error.message
+        });
+    }
+};
+</file>
+
+<file path="src/middleware/authMiddleware.ts">
+import jwt from "jsonwebtoken";
+import { Request, Response, NextFunction } from "express";
+
+export interface UserPayload {
+    id: number;
+    name: string;
+    email: string;
+    role: "admin" | "staff";
+}
+
+// Blacklisted (logged-out) tokens. This is the ONLY place it is defined.
+export const tokenBlacklist = new Set<string>();
+
+// AUTHENTICATE TOKEN
+export const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(" ")[1];
+
+    if (!token) {
+        return res.status(401).json({
+            message: "Access token required"
+        });
+    }
+
+    // Logged-out token check
+    if (tokenBlacklist.has(token)) {
+        return res.status(401).json({
+            message: "Token has been invalidated. Please log in again."
+        });
+    }
+
+    try {
+        const jwtSecret = process.env.JWT_SECRET;
+
+        if (!jwtSecret) {
+            return res.status(500).json({
+                message: "JWT_SECRET is not configured"
+            });
+        }
+
+        const decoded = jwt.verify(token, jwtSecret);
+
+        if (typeof decoded === "string") {
+            return res.status(403).json({
+                message: "Invalid token payload"
+            });
+        }
+
+        if (
+            typeof decoded.id !== "number" ||
+            typeof decoded.name !== "string" ||
+            typeof decoded.email !== "string" ||
+            (decoded.role !== "admin" && decoded.role !== "staff")
+        ) {
+            return res.status(403).json({
+                message: "Invalid token payload"
+            });
+        }
+
+        req.user = {
+            id: decoded.id,
+            name: decoded.name,
+            email: decoded.email,
+            role: decoded.role
+        };
+
+        next();
+    } catch (error) {
+        return res.status(403).json({
+            message: "Invalid or expired token"
+        });
+    }
+};
+
+// ROLE CHECK (e.g. authorizeRoles("admin", "staff"))
+export const authorizeRoles = (...allowedRoles: string[]) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        if (!req.user) {
+            return res.status(401).json({
+                message: "User authentication required"
+            });
+        }
+
+        if (!allowedRoles.includes(req.user.role)) {
+            return res.status(403).json({
+                message: "Access denied: Insufficient permissions"
+            });
+        }
+
+        next();
+    };
+};
+
+// ADMIN ONLY (shortcut used by the new routes)
+export const adminOnly = authorizeRoles("admin");
+</file>
+
+<file path="src/models/userModel.ts">
+import { pool } from "../config/db";
+import { RowDataPacket } from "mysql2";
+
+export interface User extends RowDataPacket {
+    id: number;
+    name: string;
+    email: string;
+    username: string;
+    password_hash: string;
+    role: "admin" | "staff";
+}
+
+export async function findUserByIdentifier(identifier: string): Promise<User | null> {
+    const [rows] = await pool.query<User[]>(
+        "SELECT * FROM users WHERE email = ? OR username = ? LIMIT 1",
+        [identifier, identifier]
+    );
+    return rows.length > 0 ? rows[0] ?? null : null;
+}
+</file>
+
+<file path="src/routes/authRoutes.ts">
+import { Router, Request, Response } from "express";
+import { authenticateToken, authorizeRoles } from "../middleware/authMiddleware";
+import { login, logout } from "../controllers/authController";
+
+const router = Router();
+
+// Auth endpoints
+router.post("/login", login);
+router.post("/logout", logout);
+
+// Admin dashboard protected route (GT-BUG-002)
+router.get(
+    "/admin-dashboard",
+    authenticateToken,
+    authorizeRoles("admin"),
+    (req: Request, res: Response) => {
+        res.status(200).json({
+            message: `Welcome Admin! Access granted. User ID: ${req.user?.id}`
+        });
+    }
+);
+
+export default router;
+</file>
+
+<file path="src/routes/categoryRoutes.ts">
+import express from "express";
+import { adminOnly, authenticateToken } from "../middleware/authMiddleware";
+import {
+    getCategories,
+    getCategoryById,
+    createCategory,
+    updateCategory,
+    deleteCategory
+} from "../controllers/categoryController";
+
+const router = express.Router();
+
+router.get("/", authenticateToken, getCategories);
+router.get("/:id", authenticateToken, getCategoryById);
+router.post("/", authenticateToken, adminOnly, createCategory);
+router.put("/:id", authenticateToken, adminOnly, updateCategory);
+router.delete("/:id", authenticateToken, adminOnly, deleteCategory);
+
+export default router;
+</file>
+
+<file path="src/routes/dashboardRoutes.ts">
+import express from "express";
+import db from "../config/db";
+
+import { authenticateToken } from "../middleware/authMiddleware";
+
+const router = express.Router();
+
+
+// DASHBOARD
+router.get("/", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [todaySales] = await db.execute<any>(`
+            SELECT
+                COALESCE(SUM(total_amount), 0) AS today_sales
+            FROM sales
+            WHERE DATE(sale_date) = CURDATE()
+        `);
+
+        const [productCount] = await db.execute<any>(`
+            SELECT COUNT(*) AS total_products
+            FROM products
+        `);
+
+        const [salesCount] = await db.execute<any>(`
+            SELECT COUNT(*) AS total_sales
+            FROM sales
+        `);
+
+        const [lowStock] = await db.execute<any>(`
+            SELECT COUNT(*) AS low_stock_products
+            FROM products
+            WHERE stock_quantity <= minimum_stock
+        `);
+
+        res.json({
+            today_sales: todaySales[0].today_sales,
+            total_products: productCount[0].total_products,
+            total_sales: salesCount[0].total_sales,
+            low_stock_products:
+                lowStock[0].low_stock_products
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to load dashboard",
+            error: error.message
+        });
+    }
+});
+
+
+export default router;
+</file>
+
+<file path="src/routes/inventoryRoutes.ts">
+import express from "express";
+import db from "../config/db";
+
+import { authenticateToken, adminOnly } from "../middleware/authMiddleware";
+
+const router = express.Router();
+
+
+// VIEW CURRENT INVENTORY
+router.get("/", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [inventory] = await db.execute<any>(`
+            SELECT
+                p.id,
+                p.name,
+                c.category_name AS category,
+                p.stock_quantity,
+                p.minimum_stock,
+                p.price,
+                CASE
+                    WHEN p.stock_quantity <= p.minimum_stock
+                    THEN 'LOW STOCK'
+                    ELSE 'AVAILABLE'
+                END AS stock_status
+            FROM products p
+            LEFT JOIN categories c
+                ON p.category_id = c.category_id
+            ORDER BY p.stock_quantity ASC
+        `);
+
+        res.json(inventory);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get inventory",
+            error: error.message
+        });
+    }
+});
+
+
+// UPDATE STOCK
+router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
+
+    try {
+
+        const { quantity } = req.body;
+
+        if (quantity === undefined || quantity < 0) {
+            return res.status(400).json({
+                message: "Valid quantity is required"
+            });
+        }
+
+        const [result] = await db.execute<any>(
+            `UPDATE products
+             SET stock_quantity = ?
+             WHERE id = ?`,
+            [
+                quantity,
+                req.params.id
+            ]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Product not found"
+            });
+        }
+
+        res.json({
+            message: "Stock updated successfully"
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to update stock",
+            error: error.message
+        });
+    }
+});
+
+
+// LOW STOCK PRODUCTS
+router.get("/low-stock/list", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [products] = await db.execute<any>(`
+            SELECT
+                p.id,
+                p.name,
+                p.stock_quantity,
+                p.minimum_stock
+            FROM products p
+            WHERE p.stock_quantity <= p.minimum_stock
+            ORDER BY p.stock_quantity ASC
+        `);
+
+        res.json(products);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get low-stock products",
+            error: error.message
+        });
+    }
+});
+
+
+export default router;
+</file>
+
+<file path="src/routes/productRoutes.ts">
+import express from "express";
+import { adminOnly, authenticateToken } from "../middleware/authMiddleware";
+import {
+    getProducts,
+    searchProducts,
+    getProductById,
+    createProduct,
+    updateProduct,
+    deleteProduct
+} from "../controllers/productController";
+
+const router = express.Router();
+
+router.get("/", authenticateToken, getProducts);
+router.get("/search/:name", authenticateToken, searchProducts);
+router.get("/:id", authenticateToken, getProductById);
+router.post("/", authenticateToken, adminOnly, createProduct);
+router.put("/:id", authenticateToken, adminOnly, updateProduct);
+router.delete("/:id", authenticateToken, adminOnly, deleteProduct);
+
+export default router;
+</file>
+
+<file path="src/routes/reportRoutes.ts">
+import express from "express";
+import db from "../config/db";
+
+import { authenticateToken } from "../middleware/authMiddleware";
+
+const router = express.Router();
+
+
+// SALES REPORT
+router.get("/sales", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [report] = await db.execute<any>(`
+            SELECT
+                DATE(sale_date) AS sale_date,
+                COUNT(*) AS total_transactions,
+                SUM(total_amount) AS total_sales
+            FROM sales
+            GROUP BY DATE(sale_date)
+            ORDER BY sale_date DESC
+        `);
+
+        res.json(report);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to generate sales report",
+            error: error.message
+        });
+    }
+});
+
+
+// INVENTORY REPORT
+router.get("/inventory", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [report] = await db.execute<any>(`
+            SELECT
+                p.id,
+                p.name,
+                c.name AS category,
+                p.stock_quantity,
+                p.minimum_stock,
+                p.price,
+                CASE
+                    WHEN p.stock_quantity <= p.minimum_stock
+                    THEN 'LOW STOCK'
+                    ELSE 'OK'
+                END AS status
+            FROM products p
+            LEFT JOIN categories c
+                ON p.category_id = c.id
+            ORDER BY p.stock_quantity ASC
+        `);
+
+        res.json(report);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to generate inventory report",
+            error: error.message
+        });
+    }
+});
+
+
+export default router;
+</file>
+
+<file path="src/routes/salesRoutes.ts">
+import express from "express";
+import db from "../config/db";
+
+import { authenticateToken } from "../middleware/authMiddleware";
+
+interface SaleItem {
+    product_id: number;
+    quantity: number;
+    price: number;
+    subtotal: number;
+}
+
+const router = express.Router();
+
+
+// CREATE SALE
+router.post("/", authenticateToken, async (req, res) => {
+
+    const connection = await db.getConnection();
+
+    try {
+
+        const { items } = req.body;
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                message: "Sale items are required"
+            });
+        }
+
+        await connection.beginTransaction();
+
+        let totalAmount = 0;
+
+        const saleItems: SaleItem[] = [];
+
+        // CHECK PRODUCTS AND STOCK
+        for (const item of items) {
+
+            const {
+                product_id,
+                quantity
+            } = item;
+
+            if (!product_id || !quantity || quantity <= 0) {
+
+                await connection.rollback();
+
+                return res.status(400).json({
+                    message:
+                        "product_id and valid quantity are required"
+                });
+            }
+
+            const [products] = await connection.execute<any>(
+                `SELECT *
+                 FROM products
+                 WHERE id = ?
+                 FOR UPDATE`,
+                [product_id]
+            );
+
+            if (products.length === 0) {
+
+                await connection.rollback();
+
+                return res.status(404).json({
+                    message:
+                        `Product ${product_id} not found`
+                });
+            }
+
+            const product = products[0];
+
+            if (product.stock_quantity < quantity) {
+
+                await connection.rollback();
+
+                return res.status(400).json({
+                    message:
+                        `Insufficient stock for ${product.name}`
+                });
+            }
+
+            const subtotal =
+                Number(product.price) * Number(quantity);
+
+            totalAmount += subtotal;
+
+            saleItems.push({
+                product_id,
+                quantity,
+                price: product.price,
+                subtotal
+            });
+        }
+
+
+        if (!req.user) {
+            await connection.rollback();
+            return res.status(401).json({
+                message: "User not authenticated"
+            });
+        }
+
+        // CREATE SALE
+        const [saleResult] = await connection.execute<any>(
+            `INSERT INTO sales
+             (user_id, total_amount)
+             VALUES (?, ?)`,
+            [
+                req.user.id,
+                totalAmount
+            ]
+        );
+
+        const saleId = saleResult.insertId;
+
+
+        // CREATE SALE ITEMS + REDUCE STOCK
+        for (const item of saleItems) {
+
+            await connection.execute<any>(`
+                INSERT INTO sale_items
+                (sale_id, product_id, quantity, price, subtotal)
+                VALUES (?, ?, ?, ?, ?)
+            `, [
+                saleId,
+                item.product_id,
+                item.quantity,
+                item.price,
+                item.subtotal
+            ]);
+
+            await connection.execute<any>(`
+                UPDATE products
+                SET stock_quantity =
+                    stock_quantity - ?
+                WHERE id = ?
+            `, [
+                item.quantity,
+                item.product_id
+            ]);
+        }
+
+
+        await connection.commit();
+
+        res.status(201).json({
+            message: "Sale completed successfully",
+            sale_id: saleId,
+            total_amount: totalAmount
+        });
+
+    } catch (error) {
+
+        await connection.rollback();
+
+        res.status(500).json({
+            message: "Sale failed",
+            error: error.message
+        });
+
+    } finally {
+
+        connection.release();
+    }
+});
+
+
+// GET ALL SALES
+router.get("/", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [sales] = await db.execute<any>(`
+            SELECT
+                s.id,
+                s.total_amount,
+                s.sale_date,
+                u.name AS sold_by
+            FROM sales s
+            LEFT JOIN users u
+                ON s.user_id = u.id
+            ORDER BY s.id DESC
+        `);
+
+        res.json(sales);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get sales",
+            error: error.message
+        });
+    }
+});
+
+
+// GET SINGLE SALE
+router.get("/:id", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [sales] = await db.execute<any>(`
+            SELECT
+                s.id,
+                s.total_amount,
+                s.sale_date,
+                u.name AS sold_by
+            FROM sales s
+            LEFT JOIN users u
+                ON s.user_id = u.id
+            WHERE s.id = ?
+        `, [req.params.id]);
+
+        if (sales.length === 0) {
+            return res.status(404).json({
+                message: "Sale not found"
+            });
+        }
+
+        const [items] = await db.execute<any>(`
+            SELECT
+                si.product_id,
+                p.name AS product_name,
+                si.quantity,
+                si.price,
+                si.subtotal
+            FROM sale_items si
+            JOIN products p
+                ON si.product_id = p.id
+            WHERE si.sale_id = ?
+        `, [req.params.id]);
+
+        res.json({
+            sale: sales[0],
+            items
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get sale",
+            error: error.message
+        });
+    }
+});
+
+
+export default router;
+</file>
+
+<file path="src/routes/staffRoutes.ts">
+import express from "express";
+import bcrypt from "bcryptjs";
+
+import db from "../config/db";
+
+import { authenticateToken, adminOnly } from "../middleware/authMiddleware";
+
+const router = express.Router();
+
+
+// =====================================================
+// GET ALL STAFF
+// GET /api/staff
+// =====================================================
+
+router.get("/", authenticateToken, adminOnly, async (req, res) => {
+
+    try {
+
+        const [staff] = await db.execute<any>(
+            `SELECT
+                id,
+                name,
+                username,
+                email,
+                role,
+                created_at
+             FROM users
+             WHERE role = 'staff'
+             ORDER BY id DESC`
+        );
+
+        res.status(200).json(staff);
+
+    } catch (error) {
+
+        console.error("Get staff error:", error);
+
+        res.status(500).json({
+            message: "Failed to fetch staff",
+            error: error.message
+        });
+    }
+});
+
+
+// =====================================================
+// GET ONE STAFF
+// GET /api/staff/:id
+// =====================================================
+
+router.get("/:id", authenticateToken, adminOnly, async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const [staff] = await db.execute<any>(
+            `SELECT
+                id,
+                name,
+                username,
+                email,
+                role,
+                created_at
+             FROM users
+             WHERE id = ?
+             AND role = 'staff'`,
+            [id]
+        );
+
+        if (staff.length === 0) {
+
+            return res.status(404).json({
+                message: "Staff not found"
+            });
+        }
+
+        res.status(200).json(staff[0]);
+
+    } catch (error) {
+
+        console.error("Get one staff error:", error);
+
+        res.status(500).json({
+            message: "Failed to fetch staff",
+            error: error.message
+        });
+    }
+});
+
+
+// =====================================================
+// CREATE STAFF
+// POST /api/staff
+// =====================================================
+
+router.post("/", authenticateToken, adminOnly, async (req, res) => {
+
+    try {
+
+        const {
+            name,
+            username,
+            email,
+            password
+        } = req.body;
+
+
+        // ---------------------------------------------
+        // REQUIRED FIELD VALIDATION
+        // ---------------------------------------------
+
+        if (!name || !username || !email || !password) {
+
+            return res.status(400).json({
+                message: "Name, username, email and password are required"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // USERNAME VALIDATION
+        // 4 - 20 characters
+        // ---------------------------------------------
+
+        if (username.length < 4 || username.length > 20) {
+
+            return res.status(400).json({
+                message: "Username must be between 4 and 20 characters"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // EMAIL VALIDATION
+        // ---------------------------------------------
+
+        const emailRegex =
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!emailRegex.test(email)) {
+
+            return res.status(400).json({
+                message: "Invalid email format"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // PASSWORD VALIDATION
+        // Minimum 8 characters
+        // Must contain at least one number
+        // ---------------------------------------------
+
+        if (
+            password.length < 8 ||
+            !/\d/.test(password)
+        ) {
+
+            return res.status(400).json({
+                message:
+                    "Password must be at least 8 characters and contain a number"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // CHECK DUPLICATE USERNAME
+        // ---------------------------------------------
+
+        const [existingUsername] = await db.execute<any>(
+            "SELECT id FROM users WHERE username = ?",
+            [username]
+        );
+
+        if (existingUsername.length > 0) {
+
+            return res.status(409).json({
+                message: "Username already in use"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // CHECK DUPLICATE EMAIL
+        // ---------------------------------------------
+
+        const [existingEmail] = await db.execute<any>(
+            "SELECT id FROM users WHERE email = ?",
+            [email]
+        );
+
+        if (existingEmail.length > 0) {
+
+            return res.status(409).json({
+                message: "Email already in use"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // HASH PASSWORD
+        // ---------------------------------------------
+
+        const passwordHash =
+            await bcrypt.hash(password, 10);
+
+
+        // ---------------------------------------------
+        // INSERT STAFF
+        //
+        // IMPORTANT:
+        // Database column = password_hash
+        // ---------------------------------------------
+
+        const [result] = await db.execute<any>(
+            `INSERT INTO users
+            (name, username, email, password_hash, role)
+            VALUES (?, ?, ?, ?, 'staff')`,
+            [
+                name,
+                username,
+                email,
+                passwordHash
+            ]
+        );
+
+
+        // ---------------------------------------------
+        // SUCCESS
+        // ---------------------------------------------
+
+        res.status(201).json({
+            message: "Staff account created",
+            staffId: result.insertId
+        });
+
+
+    } catch (error) {
+
+        console.error("Create staff error:", error);
+
+        // MySQL duplicate protection
+        if (error.code === "ER_DUP_ENTRY") {
+
+            return res.status(409).json({
+                message: "Username or email already in use"
+            });
+        }
+
+        res.status(500).json({
+            message: "Failed to create staff",
+            error: error.message
+        });
+    }
+});
+
+
+// =====================================================
+// UPDATE STAFF
+// PUT /api/staff/:id
+// =====================================================
+
+router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        const {
+            name,
+            username,
+            email,
+            password
+        } = req.body;
+
+
+        // ---------------------------------------------
+        // REQUIRED FIELD VALIDATION
+        // ---------------------------------------------
+
+        if (!name || !username || !email) {
+
+            return res.status(400).json({
+                message: "Name, username and email are required"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // USERNAME VALIDATION
+        // ---------------------------------------------
+
+        if (username.length < 4 || username.length > 20) {
+
+            return res.status(400).json({
+                message: "Username must be between 4 and 20 characters"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // EMAIL VALIDATION
+        // ---------------------------------------------
+
+        const emailRegex =
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!emailRegex.test(email)) {
+
+            return res.status(400).json({
+                message: "Invalid email format"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // CHECK STAFF EXISTS
+        // ---------------------------------------------
+
+        const [staff] = await db.execute<any>(
+            `SELECT id
+             FROM users
+             WHERE id = ?
+             AND role = 'staff'`,
+            [id]
+        );
+
+        if (staff.length === 0) {
+
+            return res.status(404).json({
+                message: "Staff not found"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // CHECK DUPLICATE USERNAME
+        // Ignore current staff
+        // ---------------------------------------------
+
+        const [existingUsername] = await db.execute<any>(
+            `SELECT id
+             FROM users
+             WHERE username = ?
+             AND id != ?`,
+            [
+                username,
+                id
+            ]
+        );
+
+        if (existingUsername.length > 0) {
+
+            return res.status(409).json({
+                message: "Username already in use"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // CHECK DUPLICATE EMAIL
+        // Ignore current staff
+        // ---------------------------------------------
+
+        const [existingEmail] = await db.execute<any>(
+            `SELECT id
+             FROM users
+             WHERE email = ?
+             AND id != ?`,
+            [
+                email,
+                id
+            ]
+        );
+
+        if (existingEmail.length > 0) {
+
+            return res.status(409).json({
+                message: "Email already in use"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // UPDATE WITH NEW PASSWORD
+        // ---------------------------------------------
+
+        if (password) {
+
+            // Password validation
+            if (
+                password.length < 8 ||
+                !/\d/.test(password)
+            ) {
+
+                return res.status(400).json({
+                    message:
+                        "Password must be at least 8 characters and contain a number"
+                });
+            }
+
+
+            const passwordHash =
+                await bcrypt.hash(password, 10);
+
+
+            await db.execute<any>(
+                `UPDATE users
+                 SET name = ?,
+                     username = ?,
+                     email = ?,
+                     password_hash = ?
+                 WHERE id = ?
+                 AND role = 'staff'`,
+                [
+                    name,
+                    username,
+                    email,
+                    passwordHash,
+                    id
+                ]
+            );
+
+        }
+
+
+        // ---------------------------------------------
+        // UPDATE WITHOUT PASSWORD
+        // ---------------------------------------------
+
+        else {
+
+            await db.execute<any>(
+                `UPDATE users
+                 SET name = ?,
+                     username = ?,
+                     email = ?
+                 WHERE id = ?
+                 AND role = 'staff'`,
+                [
+                    name,
+                    username,
+                    email,
+                    id
+                ]
+            );
+        }
+
+
+        // ---------------------------------------------
+        // SUCCESS
+        // ---------------------------------------------
+
+        res.status(200).json({
+            message: "Staff updated successfully"
+        });
+
+
+    } catch (error) {
+
+        console.error("Update staff error:", error);
+
+        if (error.code === "ER_DUP_ENTRY") {
+
+            return res.status(409).json({
+                message: "Username or email already in use"
+            });
+        }
+
+        res.status(500).json({
+            message: "Failed to update staff",
+            error: error.message
+        });
+    }
+});
+
+
+// =====================================================
+// DELETE / DEACTIVATE STAFF
+// DELETE /api/staff/:id
+// =====================================================
+
+router.delete("/:id", authenticateToken, adminOnly, async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+
+        // ---------------------------------------------
+        // CHECK STAFF EXISTS
+        // ---------------------------------------------
+
+        const [staff] = await db.execute<any>(
+            `SELECT id
+             FROM users
+             WHERE id = ?
+             AND role = 'staff'`,
+            [id]
+        );
+
+        if (staff.length === 0) {
+
+            return res.status(404).json({
+                message: "Staff not found"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // DELETE STAFF
+        // ---------------------------------------------
+
+        await db.execute<any>(
+            `DELETE FROM users
+             WHERE id = ?
+             AND role = 'staff'`,
+            [id]
+        );
+
+
+        res.status(200).json({
+            message: "Staff deleted successfully"
+        });
+
+
+    } catch (error) {
+
+        console.error("Delete staff error:", error);
+
+        res.status(500).json({
+            message: "Failed to delete staff",
+            error: error.message
+        });
+    }
+});
+
+
+export default router;
+</file>
+
+<file path="src/scripts/checkTables.ts">
+import { pool } from "../config/db";
+
+async function checkTables() {
+    try {
+        const [rows] = await pool.query("SHOW TABLES");
+        console.log("Tables in database:", rows);
+
+        // Handy: shows the real column names of the products table
+        const [columns] = await pool.query("DESCRIBE products");
+        console.log("products columns:", columns);
+    } catch (error) {
+        console.error("Database connection error:", error);
+    } finally {
+        process.exit(0);
+    }
+}
+
+checkTables();
+</file>
+
+<file path="src/scripts/createTestUser.ts">
+import bcrypt from "bcryptjs";
+import { pool } from "../config/db";
+
+async function createTestUser() {
+    const name = "Test User";
+    const email = "test@example.com";
+    const username = "testuser";
+    const plainPassword = "password123";
+    const role = "admin";
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
+
+    await pool.query(
+        "INSERT INTO users (name, email, username, password_hash, role) VALUES (?, ?, ?, ?, ?)",
+        [name, email, username, passwordHash, role]
+    );
+
+    console.log("Test user created:");
+    console.log("Email:", email);
+    console.log("Username:", username);
+    console.log("Password:", plainPassword);
+    console.log("Role:", role);
+    process.exit(0);
+}
+
+createTestUser().catch((err) => {
+    console.error(err);
+    process.exit(1);
+});
+</file>
+
+<file path="src/app.ts">
+import dotenv from "dotenv";
+dotenv.config();
+
+import express from "express";
+import cors from "cors";
+
+import authRoutes from "./routes/authRoutes";
+import categoryRoutes from "./routes/categoryRoutes";
+import productRoutes from "./routes/productRoutes";
+import inventoryRoutes from "./routes/inventoryRoutes";
+import salesRoutes from "./routes/salesRoutes";
+import dashboardRoutes from "./routes/dashboardRoutes";
+import reportRoutes from "./routes/reportRoutes";
+import staffRoutes from "./routes/staffRoutes";
+
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+app.get("/", (req, res) => {
+    res.json({
+        message: "GroceryTrack API is running"
+    });
+});
+
+app.use("/api/auth", authRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/inventory", inventoryRoutes);
+app.use("/api/sales", salesRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/staff", staffRoutes);
+
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
+</file>
+
+<file path="types/express.d.ts">
+import { UserPayload } from "../src/middleware/authMiddleware";
+
+declare global {
+    namespace Express {
+        interface Request {
+            user?: UserPayload;
+        }
+    }
+}
+
+export {};
+</file>
+
+<file path=".env.example">
+PORT=3000
+JWT_SECRET=change_this_to_a_long_random_secret
+JWT_EXPIRES_IN=1d
+
+DB_HOST=your_db_host
+DB_USER=your_database_username
+DB_PASSWORD=your_database_password
+DB_NAME=your_database_name
+DB_PORT=3306
+DB_SSL_CA=./ca.pem
+</file>
+
+<file path=".gitignore">
+node_modules/
+dist/
+.env
+npm-debug.log*
+.DS_Store
+</file>
+
+<file path="ca.pem">
+-----BEGIN CERTIFICATE-----
+MIIERDCCAqygAwIBAgIUNSNhEHWL+29MUGJGCT1SURgRZ8QwDQYJKoZIhvcNAQEM
+BQAwOjE4MDYGA1UEAwwvMzM0MzBkNjUtYzc5Yy00MWQxLWFjNTYtMzZjODU3ZDY2
+Yzg2IFByb2plY3QgQ0EwHhcNMjYwOTI0MDMwNTQ5WhcNMzYwOTIxMDMwNTQ5WjA6
+MTgwNgYDVQQDDC8zMzQzMGQ2NS1jNzljLTQxZDEtYWM1Ni0zNmM4NTdkNjZjODYg
+UHJvamVjdCBDQTCCAaIwDQYJKoZIhvcNAQEBBQADggGPADCCAYoCggGBAJx2L71Y
+mhpUbYrSd9vGHyk0KDwYzzGOejkcvDtv83FCqzhUZ+PUnxulhwpI4mU3JV9/M7dF
+9g4VaZDqyTCVrHZYxuRPTC5L5l35g9tu9MbeRAWM8GEUBv4I0v+LSAXJuZK+ejRM
+FzAv9b4c68IiRcF4/b1nOywcI5jJ7MCuIoPSZvcxd+RafZUI6OknvNv0l/LFp1gh
+bRXVof4iekHjzTvjsBkbY/pUn5WVJU1XsP4z/z9MTKL3e9jyv+p9kbTrW+7CmYud
+XZPxQZHCY7Qp+QvhArJU/vOMzhhCWM62S+7p7ATmabjcA0/k3r77SZhRBSskOJNb
+ngeYAwLpkRQMZMqycwHCTCEWd5IDG2Fz/Xb4taUJhdhQGXQ6V8Qj9y72aMzryLdR
+UinmUQukanSlad8PP2T2ebTtQw1wB6ANj8t6xzT3VqjZ9AUfVVDyStcLX1nQWTFx
+QiOigrQudNXJFiqqQ6NviyNgjeGQ5Jt1150urxLCYdzvSfyKqqaLRsflhQIDAQAB
+o0IwQDAdBgNVHQ4EFgQUNVUN6Q4g3vSe6Oer0KeoNIMM+NEwEgYDVR0TAQH/BAgw
+BgEB/wIBADALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQEMBQADggGBAH+Yl5GWftKf
+EAiX0IDuEGvTtFn5Iyo54f9+suZ/g5QFpkfT7Xf8d8DwzrPOngw+c93kYkErgNFF
+pV7/EdWyCJ3m19DW5Azm12NJhhs+DK6eNMxDQYMGB4rEzCD934tt6or5MconxWRy
+Eal6pn/tRpe4jo+tn3n+LgBg7OwwWclqw9lTVeRQdjUugztZ3ACy5SdQPMfhZlcw
+lAcBpkLJBXOMNvfU5uYJLfEJM3w91qiUTH76MIQFJourkZBMuO3Dv12r/1FmBYa5
+NIfw0Mcp+4U74kmJpstG2dZLF/P09bsm8JgCMPl25k1kPwGr+NoFysLB0oVa9cnQ
+cEybTXtdj/sSu4U2OkAMx8HsnMHzjMeI4w5HU4XqEQhj0DGt/SpjsgFMm72kuovo
+21wygB2usdN7oALH5NDc7+tv8iMYyF2wv1m+82DC7fG43ZnJMz6MrT5b6lmwyJbt
+0yyb/WKPPxQmt/91VRzxkJR1CH5Wo05nkCH2lzQo2RKePDHKG8sCBQ==
+-----END CERTIFICATE-----
+</file>
+
+<file path="package.json">
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "GroceryTrack backend API",
+  "main": "dist/app.js",
+  "scripts": {
+    "dev": "tsx watch src/app.ts",
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "useUnknownInCatchVariables": false,
+    "noImplicitAny": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}
+</file>
+
+</files>
