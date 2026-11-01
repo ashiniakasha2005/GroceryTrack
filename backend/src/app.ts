@@ -12,6 +12,7 @@ import salesRoutes from "./routes/salesRoutes";
 import dashboardRoutes from "./routes/dashboardRoutes";
 import reportRoutes from "./routes/reportRoutes";
 import staffRoutes from "./routes/staffRoutes";
+import saleCancelRoutes from "./routes/saleCancelRoutes";
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/sales", salesRoutes);
+app.use("/api/sales", saleCancelRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/staff", staffRoutes);
