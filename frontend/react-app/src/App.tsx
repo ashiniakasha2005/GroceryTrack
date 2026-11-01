@@ -7,6 +7,7 @@ import ProductsPage from './pages/ProductsPage'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import CategoryManagement from './pages/CategoryManagement'
+import { InventoryProvider } from './context/InventoryContext'
 
 
 function ProtectedRoute() {
@@ -17,22 +18,24 @@ function ProtectedRoute() {
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+    <InventoryProvider>
+      <Routes>
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
-      <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<Login />} />
 
-      <Route element={<ProtectedRoute />}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/inventory" element={<ProductsPage />} />
-        <Route path="/staff" element={<StaffManagement />} />
-        <Route path="/products" element={<ProductManagement />} />
-        <Route path="/categories" element={<CategoryManagement />} />
-        <Route path="/products" element={<ProductManagement />} />
-      </Route>
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/inventory" element={<ProductsPage />} />
+          <Route path="/staff" element={<StaffManagement />} />
+          <Route path="/products" element={<ProductManagement />} />
+          <Route path="/categories" element={<CategoryManagement />} />
+          <Route path="/products" element={<ProductManagement />} />
+        </Route>
 
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </InventoryProvider>
   )
 }
 
