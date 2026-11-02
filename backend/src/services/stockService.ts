@@ -88,6 +88,58 @@ function mergeItems(items: StockItem[]): StockItem[] {
         .sort((a, b) => a.product_id - b.product_id);
 }
 
+// ---------- LOW-STOCK STATUS (US-010 #78) ----------
+// products.is_low_stock is a GENERATED column (migration 002):
+//   is_low_stock = (current_stock <= minimum_stock)
+// MySQL re-calculates it on every stock change, so these helpers only READ
+// the up-to-date status. Call them inside the same transaction, AFTER the
+// stock was changed, so the result already includes that change.
+// Use them after: sale (deductStock), cancel (restoreStock) and restock.
+
+export interface StockStatus {
+    product_id: number;
+    product_name: string;
+    current_stock: number;
+    minimum_stock: number;
+    is_low_stock: boolean;
+}
+
+export async function getStockStatus(
+    connection: PoolConnection,
+    productIds: number[]
+): Promise<StockStatus[]> {
+    if (productIds.length === 0) {
+        return [];
+    }
+
+    const placeholders = productIds.map(() => "?").join(",");
+
+    const [rows] = await connection.execute<RowDataPacket[]>(
+        `SELECT product_id, product_name, current_stock, minimum_stock, is_low_stock
+         FROM products
+         WHERE product_id IN (${placeholders})
+         ORDER BY product_id`,
+        productIds
+    );
+
+    return rows.map((r) => ({
+        product_id: r.product_id,
+        product_name: r.product_name,
+        current_stock: r.current_stock,
+        minimum_stock: r.minimum_stock,
+        is_low_stock: Boolean(r.is_low_stock)
+    }));
+}
+
+// Only the products that are low on stock right now.
+export async function getLowStockProducts(
+    connection: PoolConnection,
+    productIds: number[]
+): Promise<StockStatus[]> {
+    const all = await getStockStatus(connection, productIds);
+    return all.filter((s) => s.is_low_stock);
+}
+
 // ---------- 1. DEDUCT STOCK ----------
 // Call BEFORE inserting the sale row (total_amount is NOT NULL, and we only
 // know the total after reading prices under lock).
@@ -156,21 +208,15 @@ export async function deductStock(
     }
 
     // Which of these products are now at / below their minimum stock?
-    const ids = lines.map((l) => l.product_id);
-    const placeholders = ids.map(() => "?").join(",");
-
-    const [lowRows] = await connection.execute<RowDataPacket[]>(
-        `SELECT product_id, product_name, current_stock, minimum_stock
-         FROM products
-         WHERE product_id IN (${placeholders})
-           AND current_stock <= minimum_stock`,
-        ids
+    const lowStock = await getLowStockProducts(
+        connection,
+        lines.map((l) => l.product_id)
     );
 
     return {
         lines,
         totalAmount: round2(totalAmount),
-        lowStock: lowRows as LowStockProduct[]
+        lowStock
     };
 }
 
@@ -197,7 +243,7 @@ export async function restoreStock(
     connection: PoolConnection,
     saleId: number,
     userId: number
-): Promise<{ sale_id: number; restored: StockItem[] }> {
+): Promise<{ sale_id: number; restored: StockItem[]; stock_status: StockStatus[] }> {
     // Lock the sale row so two cancel requests cannot both restore stock.
     const [sales] = await connection.execute<RowDataPacket[]>(
         `SELECT sale_id, status
@@ -258,7 +304,13 @@ export async function restoreStock(
         [userId, saleId]
     );
 
-    return { sale_id: saleId, restored };
+    // Stock went UP, so some products may no longer be low on stock.
+    const stock_status = await getStockStatus(
+        connection,
+        restored.map((r) => r.product_id)
+    );
+
+    return { sale_id: saleId, restored, stock_status };
 }
 
 /* =====================================================================

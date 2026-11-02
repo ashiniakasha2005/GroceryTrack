@@ -45,7 +45,8 @@ router.put("/:id/cancel", authenticateToken, adminOnly, async (req, res) => {
         return res.status(200).json({
             message: "Sale cancelled and stock restored",
             sale_id: result.sale_id,
-            restored_items: result.restored
+            restored_items: result.restored,
+            stock_status: result.stock_status
         });
 
     } catch (error: any) {
