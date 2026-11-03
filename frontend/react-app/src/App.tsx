@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import StaffManagement from './pages/StaffManagement'
 import ProductManagement from './pages/ProductManagement'
 import ProductsPage from './pages/ProductsPage'
+import SalesPage from './pages/SalesPage'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import CategoryManagement from './pages/CategoryManagement'
@@ -25,10 +26,13 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/inventory" element={<ProductsPage />} />
+        <Route path="/sales" element={<SalesPage />} />
         <Route path="/staff" element={<StaffManagement />} />
         <Route path="/products" element={<ProductManagement />} />
         <Route path="/categories" element={<CategoryManagement />} />
         <Route path="/products" element={<ProductManagement />} />
+      
+
       </Route>
 
       <Route path="*" element={<NotFound />} />
