@@ -54,9 +54,9 @@ router.post("/", authenticateToken, async (req, res) => {
 
             const [products] = await connection.execute<any>(
                 `SELECT *
-                 FROM products
-                 WHERE id = ?
-                 FOR UPDATE`,
+                FROM products
+                WHERE product_id = ?
+                FOR UPDATE`,
                 [product_id]
             );
 
@@ -72,13 +72,13 @@ router.post("/", authenticateToken, async (req, res) => {
 
             const product = products[0];
 
-            if (product.stock_quantity < quantity) {
+            if (product.current_stock < quantity) {
 
                 await connection.rollback();
 
                 return res.status(400).json({
                     message:
-                        `Insufficient stock for ${product.name}`
+                        `Insufficient stock for ${product.product_name}`
                 });
             }
 
@@ -122,7 +122,7 @@ router.post("/", authenticateToken, async (req, res) => {
 
             await connection.execute<any>(`
                 INSERT INTO sale_items
-                (sale_id, product_id, quantity, price, subtotal)
+                (sale_id, product_id, quantity, unit_price, subtotal)
                 VALUES (?, ?, ?, ?, ?)
             `, [
                 saleId,
@@ -134,9 +134,8 @@ router.post("/", authenticateToken, async (req, res) => {
 
             await connection.execute<any>(`
                 UPDATE products
-                SET stock_quantity =
-                    stock_quantity - ?
-                WHERE id = ?
+                SET current_stock = current_stock - ?
+                WHERE product_id = ?
             `, [
                 item.quantity,
                 item.product_id
@@ -175,14 +174,15 @@ router.get("/", authenticateToken, async (req, res) => {
 
         const [sales] = await db.execute<any>(`
             SELECT
-                s.id,
+                s.sale_id AS id,
                 s.total_amount,
-                s.sale_date,
+                s.sale_date_time AS sale_date,
+                s.status,
                 u.name AS sold_by
             FROM sales s
             LEFT JOIN users u
                 ON s.user_id = u.id
-            ORDER BY s.id DESC
+            ORDER BY s.sale_id DESC
         `);
 
         res.json(sales);
@@ -204,14 +204,16 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
         const [sales] = await db.execute<any>(`
             SELECT
-                s.id,
+                s.sale_id AS id,
                 s.total_amount,
-                s.sale_date,
+                s.sale_date_time AS sale_date,
+                s.status,
+                s.cancelled_at,
                 u.name AS sold_by
             FROM sales s
             LEFT JOIN users u
                 ON s.user_id = u.id
-            WHERE s.id = ?
+            WHERE s.sale_id = ?
         `, [req.params.id]);
 
         if (sales.length === 0) {
@@ -223,13 +225,13 @@ router.get("/:id", authenticateToken, async (req, res) => {
         const [items] = await db.execute<any>(`
             SELECT
                 si.product_id,
-                p.name AS product_name,
+                p.product_name AS product_name,
                 si.quantity,
-                si.price,
+                si.unit_price AS price,
                 si.subtotal
             FROM sale_items si
             JOIN products p
-                ON si.product_id = p.id
+                ON si.product_id = p.product_id
             WHERE si.sale_id = ?
         `, [req.params.id]);
 

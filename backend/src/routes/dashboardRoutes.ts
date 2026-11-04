@@ -15,7 +15,8 @@ router.get("/", authenticateToken, async (req, res) => {
             SELECT
                 COALESCE(SUM(total_amount), 0) AS today_sales
             FROM sales
-            WHERE DATE(sale_date) = CURDATE()
+            WHERE DATE(sale_date_time) = CURDATE()
+              AND status = 'completed'
         `);
 
         const [productCount] = await db.execute<any>(`
@@ -26,12 +27,12 @@ router.get("/", authenticateToken, async (req, res) => {
         const [salesCount] = await db.execute<any>(`
             SELECT COUNT(*) AS total_sales
             FROM sales
+            WHERE status = 'completed'
         `);
-
         const [lowStock] = await db.execute<any>(`
             SELECT COUNT(*) AS low_stock_products
             FROM products
-            WHERE stock_quantity <= minimum_stock
+            WHERE current_stock <= minimum_stock
         `);
 
         res.json({
