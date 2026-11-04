@@ -229,7 +229,14 @@ export const deleteProduct = async (req: Request, res: Response) => {
             message: "Product deleted successfully"
         });
 
-    } catch (error) {
+        } catch (error) {
+
+        if (error.code === "ER_ROW_IS_REFERENCED_2" || error.errno === 1451) {
+            return res.status(409).json({
+                message:
+                    "Cannot delete product because related stock movement or sales records exist."
+            });
+        }
 
         res.status(500).json({
             message: "Failed to delete product",
