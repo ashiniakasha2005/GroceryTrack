@@ -29,7 +29,22 @@ function App() {
         <Route path="/sales" element={<SalesPage />} />
         <Route path="/staff" element={<StaffManagement />} />
         <Route path="/products" element={<ProductManagement />} />
-        <Route path="/categories" element={<CategoryManagement />} />
+                <Route
+          path="/categories"
+          element={
+            (() => {
+              try {
+                const user = JSON.parse(localStorage.getItem('user') ?? 'null')
+
+                return user?.role?.toLowerCase() === 'admin'
+                  ? <CategoryManagement />
+                  : <Navigate to="/dashboard" replace />
+              } catch {
+                return <Navigate to="/dashboard" replace />
+              }
+            })()
+          }
+        />
         <Route path="/products" element={<ProductManagement />} />
       
 
