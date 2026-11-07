@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import db from "../config/db";
+import { isNonNegativeInteger } from "../utils/validators";
 
 // GET /api/products
 export const getProducts = async (req: Request, res: Response) => {
@@ -124,6 +125,15 @@ export const createProduct = async (req: Request, res: Response) => {
             });
         }
 
+        if (
+            (stock_quantity !== undefined && !isNonNegativeInteger(stock_quantity)) ||
+            (minimum_stock !== undefined && !isNonNegativeInteger(minimum_stock))
+        ) {
+            return res.status(400).json({
+                message: "stock_quantity and minimum_stock must be non-negative whole numbers"
+            });
+        }
+
         const [result] = await db.execute<any>(`
             INSERT INTO products
             (product_name, category_id, price, current_stock, minimum_stock)
@@ -171,6 +181,12 @@ export const updateProduct = async (req: Request, res: Response) => {
             return res.status(400).json({
                 message:
                     "Name, category_id, price and minimum_stock are required"
+            });
+        }
+
+                if (!isNonNegativeInteger(minimum_stock)) {
+            return res.status(400).json({
+                message: "minimum_stock must be a non-negative whole number"
             });
         }
 
