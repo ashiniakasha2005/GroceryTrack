@@ -48,7 +48,6 @@ router.post("/", authenticateToken, async (req, res) => {
     let transactionStarted = false;
 
     try {
-
         const { items } = req.body;
 
         if (!Array.isArray(items) || items.length === 0) {
@@ -119,6 +118,7 @@ router.post("/", authenticateToken, async (req, res) => {
             }
 
             const product = products[0];
+            const availableStock = Number(product.current_stock);
 
             if (product.current_stock < quantity) {
                 await connection.rollback();
@@ -170,6 +170,19 @@ router.post("/", authenticateToken, async (req, res) => {
         const saleId = saleResult.insertId;
 
         for (const item of saleItems) {
+            // Record sale item
+            await connection.execute(
+                `INSERT INTO sale_items
+                    (sale_id, product_id, quantity, unit_price, subtotal)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    saleId,
+                    item.product_id,
+                    item.quantity,
+                    item.unit_price,
+                    item.subtotal
+                ]
+            );
 
             await connection.execute<ResultSetHeader>(
                 `INSERT INTO sale_items
@@ -215,6 +228,7 @@ router.post("/", authenticateToken, async (req, res) => {
             );
         }
 
+        // Commit all changes together
         await connection.commit();
         transactionStarted = false;
 
@@ -261,7 +275,6 @@ router.post("/", authenticateToken, async (req, res) => {
 // =========================
 
 router.get("/", authenticateToken, async (req, res) => {
-
     try {
 
         const [sales] = await db.execute<RowDataPacket[]>(`
@@ -272,8 +285,8 @@ router.get("/", authenticateToken, async (req, res) => {
                 s.total_amount,
                 s.status,
                 u.name AS sold_by
-            FROM sales s
-            LEFT JOIN users u
+             FROM sales s
+             LEFT JOIN users u
                 ON s.user_id = u.id
             ORDER BY s.sale_id DESC
         `);
@@ -296,8 +309,14 @@ router.get("/", authenticateToken, async (req, res) => {
 // =========================
 
 router.get("/:id", authenticateToken, async (req, res) => {
-
     try {
+        const saleId = Number(req.params.id);
+
+        if (!Number.isSafeInteger(saleId) || saleId <= 0) {
+            return res.status(400).json({
+                message: "Invalid sale ID"
+            });
+        }
 
         const saleId = Number(req.params.id);
 
@@ -315,8 +334,8 @@ router.get("/:id", authenticateToken, async (req, res) => {
                 s.total_amount,
                 s.status,
                 u.name AS sold_by
-            FROM sales s
-            LEFT JOIN users u
+             FROM sales s
+             LEFT JOIN users u
                 ON s.user_id = u.id
             WHERE s.sale_id = ?
         `, [saleId]);
