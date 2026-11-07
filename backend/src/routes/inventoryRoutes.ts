@@ -1,5 +1,6 @@
 import express from "express";
 import db from "../config/db";
+import { isNonNegativeInteger, isPositiveInteger } from "../utils/validators";
 
 import { authenticateToken, adminOnly } from "../middleware/authMiddleware";
 
@@ -42,16 +43,16 @@ router.get("/", authenticateToken, async (req, res) => {
 });
 
 
-// UPDATE STOCK
+// UPDATE STOCK (SET EXACT QUANTITY)
 router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
 
     try {
 
         const { quantity } = req.body;
 
-        if (quantity === undefined || quantity < 0) {
+        if (!isNonNegativeInteger(quantity)) {
             return res.status(400).json({
-                message: "Valid quantity is required"
+                message: "Quantity must be a non-negative whole number"
             });
         }
 
@@ -81,6 +82,78 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
             message: "Failed to update stock",
             error: error.message
         });
+    }
+});
+
+
+// RESTOCK PRODUCT (ADD QUANTITY)
+router.post("/:id/restock", authenticateToken, adminOnly, async (req, res) => {
+
+    const { quantity } = req.body;
+
+    if (!isPositiveInteger(quantity)) {
+        return res.status(400).json({
+            message: "Restock quantity must be a whole number greater than 0"
+        });
+    }
+
+    const connection = await db.getConnection();
+
+    try {
+
+        await connection.beginTransaction();
+
+        const [result] = await connection.execute<any>(
+            `UPDATE products
+             SET current_stock = current_stock + ?
+             WHERE product_id = ?`,
+            [quantity, req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+                message: "Product not found"
+            });
+        }
+
+        await connection.execute<any>(
+            `INSERT INTO stock_movements
+             (product_id, change_qty, reason, user_id)
+             VALUES (?, ?, 'RESTOCK', ?)`,
+            [req.params.id, quantity, req.user?.id ?? null]
+        );
+
+        await connection.commit();
+
+        const [rows] = await connection.execute<any>(
+            `SELECT
+                product_id,
+                product_name,
+                current_stock AS stock_quantity,
+                minimum_stock
+             FROM products
+             WHERE product_id = ?`,
+            [req.params.id]
+        );
+
+        res.json({
+            message: "Stock restocked successfully",
+            product: rows[0]
+        });
+
+    } catch (error) {
+
+        await connection.rollback();
+
+        res.status(500).json({
+            message: "Failed to restock product",
+            error: error.message
+        });
+
+    } finally {
+
+        connection.release();
     }
 });
 
