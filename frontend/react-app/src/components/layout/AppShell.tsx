@@ -74,6 +74,19 @@ const navItems: NavItem[] = [
       </svg>
     ),
   },
+
+      {
+    to: '/categories',
+    label: 'Category Management',
+    icon: (
+      <svg {...iconProps}>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M7 9h10" />
+        <path d="M7 14h7" />
+      </svg>
+    ),
+  },
+
 ]
 
 const pageTitles: Record<string, string> = {
@@ -182,12 +195,23 @@ function AppShell() {
           </div>
 
           <nav className="space-y-2">
-            {navItems.map((item) => (
-              <NavLink key={item.to} to={item.to} className={navLinkClass}>
-                {item.icon}
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
+                        {navItems
+              .filter((item) => {
+                if (item.to === '/categories') {
+                  return currentUser?.role?.toLowerCase() === 'admin'
+                }
+                return true
+              })
+              .map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={navLinkClass}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
           </nav>
         </div>
 
