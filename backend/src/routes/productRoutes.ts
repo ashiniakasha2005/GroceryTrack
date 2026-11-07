@@ -1,10 +1,41 @@
-import { Router } from 'express';
-import { createProduct } from '../controllers/productController';
-import { authenticateToken, authorizeRoles } from '../middleware/authMiddleware';
+import express from "express";
+import { adminOnly, authenticateToken } from "../middleware/authMiddleware";
+import {
+    getProducts,
+    searchProducts,
+    getProductById,
+    createProduct,
+    updateProduct,
+    updateMinimumStock,
+    deleteProduct
+} from "../controllers/productController";
 
-const router = Router();
 
-// Route to create a new product with admin authorization
-router.post('/', authenticateToken, authorizeRoles('admin'), createProduct);
+const router = express.Router();
+
+router.get("/", authenticateToken, getProducts);
+router.get("/search/:name", authenticateToken, searchProducts);
+router.get("/:id", authenticateToken, getProductById);
+router.post("/", authenticateToken, adminOnly, createProduct);
+router.put("/:id", authenticateToken, adminOnly, updateProduct);
+router.delete("/:id", authenticateToken, adminOnly, deleteProduct);
+router.patch(
+    "/:id/minimum-stock",
+    authenticateToken,
+    adminOnly,
+    updateMinimumStock
+);
+
+    deleteProduct
+} from "../controllers/productController";
+
+const router = express.Router();
+
+router.get("/", authenticateToken, getProducts);
+router.get("/search/:name", authenticateToken, searchProducts);
+router.get("/:id", authenticateToken, getProductById);
+router.post("/", authenticateToken, adminOnly, createProduct);
+router.put("/:id", authenticateToken, adminOnly, updateProduct);
+router.delete("/:id", authenticateToken, adminOnly, deleteProduct);
 
 export default router;

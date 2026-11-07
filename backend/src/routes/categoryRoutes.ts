@@ -1,20 +1,19 @@
-import { Router } from 'express';
+import express from "express";
+import { adminOnly, authenticateToken } from "../middleware/authMiddleware";
 import {
-  getCategories,
-  addCategory,
-  editCategory,
-  removeCategory,
-} from '../controllers/categoryController';
-import { authenticateToken, authorizeRoles } from '../middleware/authMiddleware';
+    getCategories,
+    getCategoryById,
+    createCategory,
+    updateCategory,
+    deleteCategory
+} from "../controllers/categoryController";
 
-const router = Router();
+const router = express.Router();
 
-// Read: logged-in ඕනම user කෙනෙකුට
-router.get('/', authenticateToken, getCategories);
-
-// Manage: admin ට විතරයි
-router.post('/', authenticateToken, authorizeRoles('admin'), addCategory);
-router.put('/:id', authenticateToken, authorizeRoles('admin'), editCategory);
-router.delete('/:id', authenticateToken, authorizeRoles('admin'), removeCategory);
+router.get("/", authenticateToken, getCategories);
+router.get("/:id", authenticateToken, getCategoryById);
+router.post("/", authenticateToken, adminOnly, createCategory);
+router.put("/:id", authenticateToken, adminOnly, updateCategory);
+router.delete("/:id", authenticateToken, adminOnly, deleteCategory);
 
 export default router;

@@ -3,11 +3,16 @@ import type { FormEvent } from "react";
 
 type StaffStatus = "active" | "inactive";
 
+export type StaffRole = "Admin" | "Staff";
+
+const ROLE_OPTIONS: StaffRole[] = ["Admin", "Staff"];
+
 export type StaffMember = {
   id: string;
   fullName: string;
   username: string;
   email: string;
+  role?: StaffRole;
   status?: StaffStatus;
 };
 
@@ -15,6 +20,7 @@ type FormValues = {
   fullName: string;
   username: string;
   email: string;
+  role: StaffRole;
   password: string;
 };
 
@@ -31,7 +37,6 @@ type StaffFormProps = {
   onSubmit: (
     values: Omit<FormValues, "password"> & {
       password?: string;
-      role: "Staff";
       id?: string;
     }
   ) => Promise<void> | void;
@@ -41,6 +46,7 @@ const emptyValues: FormValues = {
   fullName: "",
   username: "",
   email: "",
+  role: "Staff",
   password: "",
 };
 
@@ -53,6 +59,7 @@ function getInitialValues(
       fullName: staff.fullName,
       username: staff.username,
       email: staff.email,
+      role: staff.role ?? "Staff",
       password: "",
     };
   }
@@ -177,8 +184,11 @@ export function StaffForm({
   // registers it only runs once, so it would otherwise see stale props).
   const isSubmittingRef = useRef(isSubmitting);
   const onCloseRef = useRef(onClose);
-  isSubmittingRef.current = isSubmitting;
-  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    isSubmittingRef.current = isSubmitting;
+    onCloseRef.current = onClose;
+  });
 
   function runValidation(vals: FormValues) {
     return validate(vals, mode, { staff, existingUsernames, existingEmails });
@@ -228,14 +238,26 @@ export function StaffForm({
     };
   }, []);
 
-  useEffect(() => {
+  // Reset the form when a different staff member (or mode) is shown.
+  const resetKey = [
+    mode,
+    staff?.id,
+    staff?.fullName,
+    staff?.username,
+    staff?.email,
+    staff?.role,
+  ].join("|");
+  const [previousResetKey, setPreviousResetKey] = useState(resetKey);
+
+  if (resetKey !== previousResetKey) {
+    setPreviousResetKey(resetKey);
     setValues(getInitialValues(mode, staff));
     setErrors({});
     setTouched({});
     setShowPassword(false);
     setSuccessMessage("");
     setFormError("");
-  }, [mode, staff?.id, staff?.fullName, staff?.username, staff?.email]);
+  }
 
   useEffect(() => {
     const fontId = "staff-form-inter-font";
@@ -305,7 +327,6 @@ export function StaffForm({
         fullName: rest.fullName.trim(),
         username: rest.username.trim(),
         email: normalizedEmail,
-        role: "Staff" as const,
         ...(mode === "edit" && staff ? { id: staff.id } : {}),
         ...(mode === "edit" && !password ? {} : { password }),
       };
@@ -492,7 +513,7 @@ export function StaffForm({
                 required
                 disabled={isSubmitting}
                 value={values.username}
-                placeholder="e.g. j.delacruz"
+                placeholder="e.g. jdelacruz"
                 error={touched.username ? errors.username : undefined}
                 errorId={errorId("username")}
                 inputClassName={fieldClass("username")}
@@ -508,14 +529,39 @@ export function StaffForm({
                   Role
                 </label>
 
-                <input
-                  id={`${titleId}-role`}
-                  name="role"
-                  value="Staff"
-                  readOnly
-                  disabled
-                  className="h-[38px] w-full cursor-not-allowed rounded-[6px] border border-[#dee2e6] bg-[#f8f9fa] px-3 text-[13px] font-['Inter'] leading-none text-[#343a40] opacity-100"
-                />
+                <div className="relative">
+                  <select
+                    id={`${titleId}-role`}
+                    name="staff-role"
+                    value={values.role}
+                    disabled={isSubmitting}
+                    onChange={(event) =>
+                      updateField("role", event.target.value)
+                    }
+                    className="h-[38px] w-full cursor-pointer appearance-none rounded-[6px] border border-[#dee2e6] bg-white pl-3 pr-9 text-[13px] leading-none text-[#343a40] outline-none transition focus:border-[#0d6efd] focus:ring-2 focus:ring-[#cfe2ff] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {ROLE_OPTIONS.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+
+                  <svg
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#6c757d]"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </div>
               </div>
             </div>
 

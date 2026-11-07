@@ -1,98 +1,147 @@
-import { Request, Response } from 'express';
-import {
-  getAllCategories,
-  getCategoryById,
-  findCategoryByName,
-  createCategory,
-  updateCategory,
-  deleteCategory,
-  countProductsInCategory,
-} from '../models/categoryModel';
-
-function cleanName(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
+import { Request, Response } from "express";
+import db from "../config/db";
 
 // GET /api/categories
-export async function getCategories(req: Request, res: Response) {
-  try {
-    return res.status(200).json(await getAllCategories());
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-}
+export const getCategories = async (req: Request, res: Response) => {
+
+    try {
+
+        const [categories] = await db.execute<any>(
+            "SELECT category_id AS id, category_name AS name FROM categories ORDER BY category_id DESC"
+        );
+
+        res.json(categories);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get categories",
+            error: error.message
+        });
+    }
+};
+
+// GET /api/categories/:id
+export const getCategoryById = async (req: Request, res: Response) => {
+
+    try {
+
+        const [categories] = await db.execute<any>(
+            "SELECT category_id AS id, category_name AS name FROM categories WHERE category_id = ?",
+            [req.params.id]
+        );
+
+        if (categories.length === 0) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        res.json(categories[0]);
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get category",
+            error: error.message
+        });
+    }
+};
 
 // POST /api/categories
-export async function addCategory(req: Request, res: Response) {
-  try {
-    const name = cleanName(req.body.category_name);
-    if (!name) {
-      return res.status(400).json({ message: 'Category name is required' });
-    }
-    if (name.length > 100) {
-      return res.status(400).json({ message: 'Category name must be 100 characters or less' });
-    }
-    if (await findCategoryByName(name)) {
-      return res.status(409).json({ message: 'Category already exists' });
-    }
+export const createCategory = async (req: Request, res: Response) => {
 
-    const newId = await createCategory(name);
-    return res.status(201).json({ message: 'Category created', category_id: newId });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-}
+    try {
+
+        const { name } = req.body;
+
+        if (!name) {
+            return res.status(400).json({
+                message: "Category name is required"
+            });
+        }
+
+        const [result] = await db.execute<any>(
+            "INSERT INTO categories (category_name) VALUES (?)",
+            [name]
+        );
+
+        res.status(201).json({
+            message: "Category created successfully",
+            categoryId: result.insertId
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to create category",
+            error: error.message
+        });
+    }
+};
 
 // PUT /api/categories/:id
-export async function editCategory(req: Request, res: Response) {
-  try {
-    const id = Number(req.params.id);
-    const name = cleanName(req.body.category_name);
+export const updateCategory = async (req: Request, res: Response) => {
 
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ message: 'Invalid category id' });
-    }
-    if (!name) {
-      return res.status(400).json({ message: 'Category name is required' });
-    }
-    if (!(await getCategoryById(id))) {
-      return res.status(404).json({ message: 'Category not found' });
-    }
+    try {
 
-    const sameName = await findCategoryByName(name);
-    if (sameName && sameName.category_id !== id) {
-      return res.status(409).json({ message: 'Category already exists' });
-    }
+        const { name } = req.body;
 
-    await updateCategory(id, name);
-    return res.status(200).json({ message: 'Category updated' });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-}
+        if (!name) {
+            return res.status(400).json({
+                message: "Category name is required"
+            });
+        }
+
+        const [result] = await db.execute<any>(
+            "UPDATE categories SET category_name = ? WHERE category_id = ?",
+            [name, req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        res.json({
+            message: "Category updated successfully"
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to update category",
+            error: error.message
+        });
+    }
+};
 
 // DELETE /api/categories/:id
-export async function removeCategory(req: Request, res: Response) {
-  try {
-    const id = Number(req.params.id);
+export const deleteCategory = async (req: Request, res: Response) => {
 
-    if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ message: 'Invalid category id' });
-    }
-    if (!(await getCategoryById(id))) {
-      return res.status(404).json({ message: 'Category not found' });
-    }
-    if ((await countProductsInCategory(id)) > 0) {
-      return res.status(409).json({ message: 'Cannot delete a category that still has products' });
-    }
+    try {
 
-    await deleteCategory(id);
-    return res.status(200).json({ message: 'Category deleted' });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Server error' });
-  }
-}
+        const [result] = await db.execute<any>(
+            "DELETE FROM categories WHERE category_id = ?",
+            [req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({
+                message: "Category not found"
+            });
+        }
+
+        res.json({
+            message: "Category deleted successfully"
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to delete category",
+            error: error.message
+        });
+    }
+};

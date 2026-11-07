@@ -1,4 +1,4 @@
-
+import { useEffect } from 'react'
 import { useCategories } from '../../context/CategoryContext'
 
 interface CategoryDropdownProps {
@@ -14,7 +14,12 @@ function CategoryDropdown({
   onChange,
   required = true,
 }: CategoryDropdownProps) {
-  const { categories } = useCategories()
+  const { categories, categoryError, refreshCategories } = useCategories()
+
+  // Reload the category list every time the form opens
+  useEffect(() => {
+    void refreshCategories()
+  }, [refreshCategories])
 
   return (
     <div className="product-form-field">
@@ -35,6 +40,12 @@ function CategoryDropdown({
           </option>
         ))}
       </select>
+
+      {categoryError && (
+        <p style={{ margin: 0, color: '#dc3545', fontSize: '11px' }}>
+          {categoryError}
+        </p>
+      )}
     </div>
   )
 }
