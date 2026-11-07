@@ -1,10 +1,102 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   NavLink,
   Outlet,
   useLocation,
   useNavigate,
 } from 'react-router-dom'
+
+type NavItem = {
+  to: string
+  label: string
+  icon: ReactNode
+}
+
+const iconProps = {
+  width: 16,
+  height: 16,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.7,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+}
+
+// Sidebar menu – same items and order as the UI design
+const navItems: NavItem[] = [
+  {
+    to: '/dashboard',
+    label: 'Dashboard',
+    icon: (
+      <svg {...iconProps}>
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </svg>
+    ),
+  },
+  {
+    to: '/sales',
+    label: 'Sales / POS',
+    icon: (
+      <svg {...iconProps}>
+        <circle cx="9" cy="19" r="1.5" />
+        <circle cx="18" cy="19" r="1.5" />
+        <path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 1.9-1.4L21 7H6" />
+      </svg>
+    ),
+  },
+  {
+    to: '/inventory',
+    label: 'Inventory',
+    icon: (
+      <svg {...iconProps}>
+        <path d="M4 6h16" />
+        <path d="M4 12h16" />
+        <path d="M4 18h16" />
+        <circle cx="7" cy="6" r="1" fill="currentColor" stroke="none" />
+        <circle cx="7" cy="12" r="1" fill="currentColor" stroke="none" />
+        <circle cx="7" cy="18" r="1" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+  },
+  {
+    to: '/staff',
+    label: 'Staff Management',
+    icon: (
+      <svg {...iconProps}>
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3.5 19c.7-3.2 2.5-5 5.5-5s4.8 1.8 5.5 5" />
+        <path d="M16 6.5a2.5 2.5 0 1 1 0 5" />
+        <path d="M16 14c2.1.2 3.7 1.7 4.3 4" />
+      </svg>
+    ),
+  },
+
+      {
+    to: '/categories',
+    label: 'Category Management',
+    icon: (
+      <svg {...iconProps}>
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M7 9h10" />
+        <path d="M7 14h7" />
+      </svg>
+    ),
+  },
+
+]
+
+const pageTitles: Record<string, string> = {
+  '/dashboard': 'Dashboard',
+  '/sales': 'Sales / POS',
+  '/inventory': 'Inventory Management',
+  '/staff': 'Staff Management',
+  '/products': 'Product Management',
+  '/categories': 'Category Management',
+}
 
 function AppShell() {
   const navigate = useNavigate()
@@ -13,29 +105,49 @@ function AppShell() {
   const [showNotifications, setShowNotifications] = useState(false)
   const [showAccountMenu, setShowAccountMenu] = useState(false)
 
-  const handleLogout = () => {
+  // The account that is currently logged in (saved by the login page)
+  const [currentUser] = useState<{ name?: string; role?: string } | null>(
+    () => {
+      try {
+        return JSON.parse(localStorage.getItem('user') ?? 'null')
+      } catch {
+        return null
+      }
+    },
+  )
+
+  const userName = currentUser?.name ?? ''
+  const userRole = currentUser?.role
+    ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)
+    : ''
+  const userInitials = userName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem('token')
+
+    try {
+      if (token) {
+        await fetch('http://localhost:3000/api/auth/logout', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      }
+    } catch (error) {
+      console.error('Logout request failed:', error)
+    }
+
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
     localStorage.removeItem('isLoggedIn')
     navigate('/login')
   }
 
-  const getPageTitle = () => {
-  if (location.pathname === '/staff') {
-    return 'Staff Management'
-  }
-
-    if (location.pathname === '/dashboard') {
-      return 'Dashboard'
-    }
-    if (location.pathname === '/inventory') {
-    return 'Inventory Management'
-    }
-
-  if (location.pathname === '/products') {
-    return 'Product Management'
-  }
-
-  return 'GroceryTrack'
-}
+  const pageTitle = pageTitles[location.pathname] ?? 'GroceryTrack'
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -83,130 +195,23 @@ function AppShell() {
           </div>
 
           <nav className="space-y-2">
-            {/* Dashboard */}
-            <NavLink to="/dashboard" className={navLinkClass}>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="7" height="7" rx="1" />
-              </svg>
-
-              <span>Dashboard</span>
-            </NavLink>
-                        {/* Product Management */}
-            <NavLink to="/products" className={navLinkClass}>
-              <span>Product Management</span>
-            </NavLink>
-
-            {/* Sales / POS */}
-            <NavLink
-              to="/sales"
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                  isActive
-                    ? 'bg-[#0d6efd] font-semibold text-white'
-                    : 'text-[#adb5bd] hover:bg-[#343a40] hover:text-white'
-                }`
-              }
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="9" cy="19" r="1.5" />
-                <circle cx="18" cy="19" r="1.5" />
-                <path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 1.9-1.4L21 7H6" />
-              </svg>
-
-              <span>Sales / POS</span>
-            </NavLink>
-
-            {/* Inventory */}
-            <NavLink
-              to="/inventory"
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                  isActive
-                    ? 'bg-[#0d6efd] font-semibold text-white'
-                    : 'text-[#adb5bd] hover:bg-[#343a40] hover:text-white'
-                }`
-              }
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M4 6h16" />
-                <path d="M4 12h16" />
-                <path d="M4 18h16" />
-                <circle
-                  cx="7"
-                  cy="6"
-                  r="1"
-                  fill="currentColor"
-                  stroke="none"
-                />
-                <circle
-                  cx="7"
-                  cy="12"
-                  r="1"
-                  fill="currentColor"
-                  stroke="none"
-                />
-                <circle
-                  cx="7"
-                  cy="18"
-                  r="1"
-                  fill="currentColor"
-                  stroke="none"
-                />
-              </svg>
-
-              <span>Inventory</span>
-            </NavLink>
-
-            {/* Staff Management */}
-            <NavLink to="/staff" className={navLinkClass}>
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="9" cy="8" r="3" />
-                <path d="M3.5 19c.7-3.2 2.5-5 5.5-5s4.8 1.8 5.5 5" />
-                <path d="M16 6.5a2.5 2.5 0 1 1 0 5" />
-                <path d="M16 14c2.1.2 3.7 1.7 4.3 4" />
-              </svg>
-
-              <span>Staff Management</span>
-            </NavLink>
+                        {navItems
+              .filter((item) => {
+                if (item.to === '/categories') {
+                  return currentUser?.role?.toLowerCase() === 'admin'
+                }
+                return true
+              })
+              .map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={navLinkClass}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
           </nav>
         </div>
 
@@ -215,16 +220,16 @@ function AppShell() {
           {/* Logged-in user */}
           <div className="mb-3 flex items-center gap-3 px-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d6efd] text-[10px] font-bold text-white">
-              MS
+              {userInitials}
             </div>
 
             <div className="min-w-0">
               <div className="truncate text-xs font-semibold text-white">
-                Maria Santos
+                {userName}
               </div>
 
               <div className="mt-0.5 text-[10px] text-[#adb5bd]">
-                Admin
+                {userRole}
               </div>
             </div>
           </div>
@@ -262,12 +267,10 @@ function AppShell() {
           {/* Page title + date */}
           <div>
             <h1 className="text-sm font-semibold leading-tight text-[#212529]">
-              {getPageTitle()}
+              {pageTitle}
             </h1>
 
-            <div className="mt-1 text-[10px] text-[#adb5bd]">
-              {today}
-            </div>
+            <div className="mt-1 text-[10px] text-[#adb5bd]">{today}</div>
           </div>
 
           {/* Right side */}
@@ -359,32 +362,18 @@ function AppShell() {
                 className="flex items-center gap-2 rounded-md border-none bg-transparent p-0 text-left transition hover:bg-[#f8f9fa]"
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0d6efd] text-[10px] font-bold text-white">
-                  MS
+                  {userInitials}
                 </div>
 
                 <div className="leading-tight">
                   <div className="text-xs font-semibold text-[#343a40]">
-                    Maria Santos
+                    {userName}
                   </div>
 
                   <div className="mt-0.5 text-[10px] text-[#adb5bd]">
-                    Admin
+                    {userRole}
                   </div>
                 </div>
-
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="ml-1 text-[#adb5bd]"
-                >
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
               </button>
 
               {/* Account Dropdown */}
@@ -394,16 +383,16 @@ function AppShell() {
                   <div className="border-b border-[#e9ecef] px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0d6efd] text-[10px] font-bold text-white">
-                        MS
+                        {userInitials}
                       </div>
 
                       <div>
                         <div className="text-xs font-semibold text-[#343a40]">
-                          Maria Santos
+                          {userName}
                         </div>
 
                         <div className="mt-1 text-[10px] text-[#adb5bd]">
-                          Admin
+                          {userRole}
                         </div>
                       </div>
                     </div>
@@ -431,7 +420,6 @@ function AppShell() {
                         <circle cx="12" cy="8" r="3" />
                         <path d="M5 20c.8-3.3 3-5 7-5s6.2 1.7 7 5" />
                       </svg>
-
                       Profile
                     </button>
 
@@ -454,7 +442,6 @@ function AppShell() {
                         <path d="M15 12H3" />
                         <path d="M21 4v16" />
                       </svg>
-
                       Logout
                     </button>
                   </div>

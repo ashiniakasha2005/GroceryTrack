@@ -1,5 +1,4 @@
-
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import CategoryDropdown from './CategoryDropdown'
 
 export interface ProductFormData {
@@ -10,6 +9,8 @@ export interface ProductFormData {
   currentStock: number
   minimumStock: number
 }
+
+const UNIT_OPTIONS = ['pcs', 'kg', 'g', 'L', 'ml', 'pack', 'bottle']
 
 interface ProductFormProps {
   initialValues?: ProductFormData
@@ -31,13 +32,28 @@ function ProductForm({
     initialValues ? String(initialValues.price) : '',
   )
   const [currentStock, setCurrentStock] = useState(
-    initialValues ? String(initialValues.currentStock) : '0',
+    initialValues ? String(initialValues.currentStock) : '',
   )
   const [minimumStock, setMinimumStock] = useState(
-    initialValues ? String(initialValues.minimumStock) : '0',
+    initialValues ? String(initialValues.minimumStock) : '',
   )
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+
+  // If a product has a unit that is not in the list, keep it selectable
+  const unitOptions = UNIT_OPTIONS.includes(unit)
+    ? UNIT_OPTIONS
+    : [unit, ...UNIT_OPTIONS]
+
+  // Close with the Escape key
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !isSaving) onCancel()
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isSaving, onCancel])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -91,8 +107,12 @@ function ProductForm({
         currentStock: parsedCurrentStock,
         minimumStock: parsedMinimumStock,
       })
-    } catch {
-      setError('Could not save the product. Please try again.')
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Could not save the product. Please try again.',
+      )
     } finally {
       setIsSaving(false)
     }
@@ -101,6 +121,7 @@ function ProductForm({
   return (
     <section
       className="product-modal"
+      style={{ width: 'min(100%, 480px)' }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-modal-title"
@@ -139,6 +160,7 @@ function ProductForm({
               onChange={(event) => setName(event.target.value)}
               required
               maxLength={100}
+              placeholder="e.g. White Sugar 1kg"
             />
           </div>
 
@@ -151,18 +173,22 @@ function ProductForm({
 
           <div className="product-form-field">
             <label htmlFor="product-unit">Unit</label>
-            <input
+            <select
               id="product-unit"
               name="unit"
-              type="text"
               value={unit}
               onChange={(event) => setUnit(event.target.value)}
-              maxLength={24}
-            />
+            >
+              {unitOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="product-form-field">
-            <label htmlFor="product-price">Price (Rs.) *</label>
+            <label htmlFor="product-price">Price (LKR) *</label>
             <input
               id="product-price"
               name="price"
@@ -171,6 +197,7 @@ function ProductForm({
               step="0.01"
               value={price}
               onChange={(event) => setPrice(event.target.value)}
+              placeholder="0.00"
               required
             />
           </div>
@@ -185,6 +212,7 @@ function ProductForm({
               step="1"
               value={currentStock}
               onChange={(event) => setCurrentStock(event.target.value)}
+              placeholder="0"
               required
             />
           </div>
@@ -199,6 +227,7 @@ function ProductForm({
               step="1"
               value={minimumStock}
               onChange={(event) => setMinimumStock(event.target.value)}
+              placeholder="0"
               required
             />
           </div>

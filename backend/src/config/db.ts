@@ -1,25 +1,56 @@
-import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
-
+import dotenv from "dotenv";
 dotenv.config();
 
-// Read SSL Certificate securely
-const sslCaPath = process.env.DB_SSL_CA || './ca.pem';
-const resolvedCaPath = path.resolve(__dirname, '../../', sslCaPath);
-const sslCert = fs.existsSync(resolvedCaPath) 
-  ? fs.readFileSync(resolvedCaPath) 
-  : undefined;
+import mysql from "mysql2/promise";
+import fs from "fs";
+import path from "path";
+
+const requiredEnv = [
+    "DB_HOST",
+    "DB_USER",
+    "DB_PASSWORD",
+    "DB_NAME",
+    "DB_SSL_CA"
+] as const;
+
+for (const key of requiredEnv) {
+    if (!process.env[key]) {
+        throw new Error(`Missing environment variable: ${key}`);
+    }
+}
+
+// ca.pem is expected in the backend root folder (next to package.json)
+const sslCaPath = path.resolve(process.cwd(), process.env.DB_SSL_CA as string);
+
+if (!fs.existsSync(sslCaPath)) {
+    throw new Error(`SSL certificate not found: ${sslCaPath}`);
+}
 
 export const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'grocerytrack',
-  port: Number(process.env.DB_PORT) || 3306,
-  ssl: sslCert ? { ca: sslCert, rejectUnauthorized: true } : undefined,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-} as mysql.PoolOptions);
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT ?? 3306),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    ssl: {
+        ca: fs.readFileSync(sslCaPath),
+        rejectUnauthorized: true
+    },
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
+
+pool.getConnection()
+    .then((connection) => {
+        console.log("MySQL connected successfully");
+        connection.release();
+    })
+    .catch((error: Error) => {
+        console.error("MySQL connection failed:", error.message);
+    });
+
+// Both import styles work:
+//   import pool from "../config/db";
+//   import { pool } from "../config/db";
+export default pool;

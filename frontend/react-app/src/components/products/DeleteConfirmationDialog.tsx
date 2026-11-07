@@ -1,14 +1,12 @@
-
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 
 interface DeleteConfirmationDialogProps {
-  productName: string
+  productName?: string
   onConfirm: () => void | Promise<void>
   onCancel: () => void
 }
 
 function DeleteConfirmationDialog({
-  productName,
   onConfirm,
   onCancel,
 }: DeleteConfirmationDialogProps) {
@@ -90,15 +88,8 @@ function DeleteConfirmationDialog({
           id="delete-dialog-description"
           className="mt-2 text-xs leading-relaxed text-[#8a8f98]"
         >
-          This action cannot be undone. The product{' '}
-          {productName ? (
-            <strong className="font-semibold text-[#212529]">
-              "{productName}"
-            </strong>
-          ) : (
-            'item'
-          )}{' '}
-          will be permanently removed from inventory.
+          This action cannot be undone. The product will be permanently
+          removed from inventory.
         </p>
 
         {error && (
@@ -133,4 +124,3 @@ function DeleteConfirmationDialog({
 }
 
 export default DeleteConfirmationDialog
-

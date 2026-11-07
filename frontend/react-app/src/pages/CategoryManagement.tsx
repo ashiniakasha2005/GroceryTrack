@@ -1,9 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useCategories } from '../context/CategoryContext'
+
+const API_URL = 'http://localhost:3000/api'
+
+async function request(path: string, options: RequestInit = {}) {
+  const token = localStorage.getItem('token')
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Request failed')
+  }
+
+  return data
+}
 
 function CategoryManagement() {
   // Shared category data
-  const { categories, setCategories } = useCategories()
+  const { categories, categoryItems, refreshCategories } = useCategories()
   // Add Category state
   const [newCategory, setNewCategory] = useState('')
   const [error, setError] = useState('')
@@ -16,8 +38,13 @@ function CategoryManagement() {
   // Delete Category state
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null)
 
+  // Load categories from the backend
+  useEffect(() => {
+    void refreshCategories()
+  }, [refreshCategories])
+
   // Add a category
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     const categoryName = newCategory.trim()
 
     if (!categoryName) {
@@ -35,9 +62,20 @@ function CategoryManagement() {
       return
     }
 
-    setCategories((current) => [...current, categoryName])
-    setNewCategory('')
-    setError('')
+    try {
+      await request('/categories', {
+        method: 'POST',
+        body: JSON.stringify({ name: categoryName }),
+      })
+
+      await refreshCategories()
+      setNewCategory('')
+      setError('')
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Could not add the category.',
+      )
+    }
   }
 
   // Start editing a category
@@ -48,7 +86,7 @@ function CategoryManagement() {
   }
 
   // Save the edited category
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editingIndex === null) return
 
     const categoryName = editedName.trim()
@@ -69,15 +107,25 @@ function CategoryManagement() {
       return
     }
 
-    setCategories((current) =>
-      current.map((category, index) =>
-        index === editingIndex ? categoryName : category
-      )
-    )
+    const categoryItem = categoryItems[editingIndex]
 
-    setEditingIndex(null)
-    setEditedName('')
-    setEditError('')
+    if (!categoryItem) return
+
+    try {
+      await request(`/categories/${categoryItem.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: categoryName }),
+      })
+
+      await refreshCategories()
+      setEditingIndex(null)
+      setEditedName('')
+      setEditError('')
+    } catch (err) {
+      setEditError(
+        err instanceof Error ? err.message : 'Could not update the category.',
+      )
+    }
   }
 
   // Cancel editing
@@ -93,12 +141,24 @@ function CategoryManagement() {
   }
 
   // Confirm deletion
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (deletingIndex === null) return
 
-    setCategories((current) =>
-      current.filter((_, index) => index !== deletingIndex)
-    )
+    const categoryItem = categoryItems[deletingIndex]
+
+    if (categoryItem) {
+      try {
+        await request(`/categories/${categoryItem.id}`, {
+          method: 'DELETE',
+        })
+
+        await refreshCategories()
+      } catch (err) {
+        window.alert(
+          err instanceof Error ? err.message : 'Could not delete the category.',
+        )
+      }
+    }
 
     setDeletingIndex(null)
 

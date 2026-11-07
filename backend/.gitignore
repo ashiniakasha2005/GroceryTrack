@@ -3,7 +3,3 @@ dist/
 .env
 npm-debug.log*
 .DS_Store
-.env
-node_modules/
-dist/
-ca.pem

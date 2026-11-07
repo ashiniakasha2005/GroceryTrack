@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import db from "../config/db";
+import { isNonNegativeInteger } from "../utils/validators";
 
 // GET /api/products
 export const getProducts = async (req: Request, res: Response) => {
@@ -124,6 +125,64 @@ export const createProduct = async (req: Request, res: Response) => {
             });
         }
 
+        if (
+            (stock_quantity !== undefined && !isNonNegativeInteger(stock_quantity)) ||
+            (minimum_stock !== undefined && !isNonNegativeInteger(minimum_stock))
+        ) {
+            return res.status(400).json({
+                message: "stock_quantity and minimum_stock must be non-negative whole numbers"
+            });
+        }
+
+        const [result] = await db.execute<any>(`
+            INSERT INTO products
+            (product_name, category_id, price, current_stock, minimum_stock)
+            VALUES (?, ?, ?, ?, ?)
+        `, [
+            name,
+            category_id,
+            price,
+            stock_quantity ?? 0,
+            minimum_stock ?? 5
+        ]);
+
+        res.status(201).json({
+            message: "Product created successfully",
+            productId: result.insertId
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to create product",
+            error: error.message
+        });
+    }
+};
+
+// PUT /api/products/:id
+export const updateProduct = async (req: Request, res: Response) => {
+
+    try {
+
+        const {
+            name,
+            category_id,
+            price,
+            stock_quantity,
+            minimum_stock
+        } = req.body;
+
+        if (
+            !name ||
+            category_id === undefined ||
+            price === undefined
+        ) {
+            return res.status(400).json({
+                message: "Name, category_id and price are required"
+            });
+        }
+
         const [result] = await db.execute<any>(`
             INSERT INTO products
             (product_name, category_id, price, current_stock, minimum_stock)
@@ -171,6 +230,33 @@ export const updateProduct = async (req: Request, res: Response) => {
             return res.status(400).json({
                 message:
                     "Name, category_id, price and minimum_stock are required"
+            });
+        }
+
+        const [result] = await db.execute<any>(`
+            UPDATE products
+            SET
+                product_name = ?,
+                category_id = ?,
+                price = ?,
+                minimum_stock = ?
+            WHERE product_id = ?
+        `, [
+            name,
+            category_id,
+            price,
+            price === undefined ||
+            minimum_stock === undefined
+        ) {
+            return res.status(400).json({
+                message:
+                    "Name, category_id, price and minimum_stock are required"
+            });
+        }
+
+                if (!isNonNegativeInteger(minimum_stock)) {
+            return res.status(400).json({
+                message: "minimum_stock must be a non-negative whole number"
             });
         }
 
@@ -241,6 +327,17 @@ export const updateMinimumStock = async (
         );
 
         if (products.length === 0) {
+// DELETE /api/products/:id
+export const deleteProduct = async (req: Request, res: Response) => {
+
+    try {
+
+        const [result] = await db.execute<any>(
+            "DELETE FROM products WHERE product_id = ?",
+            [req.params.id]
+        );
+
+        if (result.affectedRows === 0) {
             return res.status(404).json({
                 message: "Product not found"
             });
@@ -283,6 +380,10 @@ export const deleteProduct = async (req: Request, res: Response) => {
                 message: "Product not found"
             });
         }
+
+        res.json({
+            message: "Product deleted successfully"
+        });
 
         res.json({
             message: "Product deleted successfully"

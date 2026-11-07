@@ -1,30 +1,99 @@
-
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import ProductForm, {
   type ProductFormData,
 } from '../components/products/ProductForm'
 import DeleteConfirmationDialog from '../components/products/DeleteConfirmationDialog'
+import { useCategories } from '../context/CategoryContext'
+
+const API_URL = 'http://localhost:3000/api'
 
 interface Product extends ProductFormData {
   id: number
-import '../components/products/ProductForms.css'
-import CategoryDropdown from '../components/products/CategoryDropdown'
-import { useState } from 'react'
+}
 
-type Product = {
+interface ApiProduct {
   id: number
   name: string
-  category: string
-  price: number
-  minimumStock: number
+  category: string | null
+  price: number | string
+  stock_quantity: number | string
+  minimum_stock: number | string
+}
+
+async function request(path: string, options: RequestInit = {}) {
+  const token = localStorage.getItem('token')
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    console.error(`API error on ${path} (HTTP ${response.status}):`, data)
+    throw new Error(data.message || 'Request failed')
+  }
+
+  return data
+}
+
+function toProduct(item: ApiProduct): Product {
+  return {
+    id: item.id,
+    name: item.name,
+    category: item.category ?? '',
+    // The database does not store a unit yet
+    unit: 'pcs',
+    price: Number(item.price),
+    currentStock: Number(item.stock_quantity),
+    minimumStock: Number(item.minimum_stock),
+  }
 }
 
 function ProductManagement() {
+  const { categoryItems, refreshCategories } = useCategories()
   const [products, setProducts] = useState<Product[]>([])
+  const [loadError, setLoadError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null)
   const lastFocusedElement = useRef<HTMLElement | null>(null)
+
+  const loadProducts = useCallback(async () => {
+    const data: ApiProduct[] = await request('/products')
+
+    setProducts(data.map(toProduct))
+    setLoadError('')
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    request('/products')
+      .then((data: ApiProduct[]) => {
+        if (cancelled) return
+
+        setProducts(data.map(toProduct))
+        setLoadError('')
+      })
+      .catch((error) => {
+        if (cancelled) return
+
+        setLoadError(
+          error instanceof Error ? error.message : 'Could not load products.',
+        )
+      })
+
+    void refreshCategories()
+
+    return () => {
+      cancelled = true
+    }
+  }, [refreshCategories])
 
   useEffect(() => {
     if (showForm) {
@@ -48,29 +117,12 @@ function ProductManagement() {
   function openAddForm() {
     lastFocusedElement.current = document.activeElement as HTMLElement
     setEditingProduct(null)
-
-  const [name, setName] = useState('')
-  const [category, setCategory] = useState('')
-  const [price, setPrice] = useState('')
-  const [minimumStock, setMinimumStock] = useState('')
-
-  function openAddForm() {
-    setEditingProduct(null)
-    setName('')
-    setCategory('')
-    setPrice('')
-    setMinimumStock('')
     setShowForm(true)
   }
 
   function openEditForm(product: Product) {
     lastFocusedElement.current = document.activeElement as HTMLElement
     setEditingProduct(product)
-    setEditingProduct(product)
-    setName(product.name)
-    setCategory(product.category)
-    setPrice(String(product.price))
-    setMinimumStock(String(product.minimumStock))
     setShowForm(true)
   }
 
@@ -80,80 +132,54 @@ function ProductManagement() {
   }
 
   async function handleSave(data: ProductFormData) {
-    if (editingProduct) {
-      setProducts((current) =>
-        current.map((product) =>
-          product.id === editingProduct.id
-            ? { ...data, id: product.id }
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+    const category = categoryItems.find((item) => item.name === data.category)
 
-    const parsedPrice = Number(price)
-    const parsedMinimumStock = Number(minimumStock)
-
-    if (
-      !name.trim() ||
-      !category ||
-      !Number.isFinite(parsedPrice) ||
-      parsedPrice <= 0 ||
-      !Number.isInteger(parsedMinimumStock) ||
-      parsedMinimumStock < 0
-    ) {
-      window.alert('Please enter valid product details.')
-      return
+    if (!category) {
+      throw new Error('Category not found')
     }
 
     if (editingProduct) {
-      setProducts((currentProducts) =>
-        currentProducts.map((product) =>
-          product.id === editingProduct.id
-            ? {
-                ...product,
-                name: name.trim(),
-                category,
-                price: parsedPrice,
-                minimumStock: parsedMinimumStock,
-              }
-            : product,
-        ),
-      )
-    } else {
-      setProducts((current) => [
-        ...current,
-        { ...data, id: Date.now() },
-      ])
-      const newProduct: Product = {
-        id: Date.now(),
-        name: name.trim(),
-        category,
-        price: parsedPrice,
-        minimumStock: parsedMinimumStock,
+      await request(`/products/${editingProduct.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: data.name,
+          category_id: category.id,
+          price: data.price,
+          minimum_stock: data.minimumStock,
+        }),
+      })
+
+      if (data.currentStock !== editingProduct.currentStock) {
+        await request(`/inventory/${editingProduct.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ quantity: data.currentStock }),
+        })
       }
-
-      setProducts((currentProducts) => [...currentProducts, newProduct])
+    } else {
+      await request('/products', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: data.name,
+          category_id: category.id,
+          price: data.price,
+          stock_quantity: data.currentStock,
+          minimum_stock: data.minimumStock,
+        }),
+      })
     }
 
+    await loadProducts()
     closeForm()
   }
 
   async function handleConfirmDelete(productId: number) {
-    setProducts((current) =>
-      current.filter((product) => product.id !== productId),
-    )
+    await request(`/products/${productId}`, { method: 'DELETE' })
 
+    await loadProducts()
     setDeletingProduct(null)
   }
 
   function closeDeleteDialog() {
-  function confirmDelete() {
-    if (!deletingProduct) return
-
-    setProducts((currentProducts) =>
-      currentProducts.filter(
-        (product) => product.id !== deletingProduct.id,
-      ),
-    )
-
     setDeletingProduct(null)
   }
 
@@ -167,11 +193,6 @@ function ProductManagement() {
           <p className="mt-1 text-sm text-[#6c757d]">
             Add, edit, and manage your grocery products.
           </p>
-    <div className="product-management">
-      <div className="product-header">
-        <div>
-          <h1>Product Management</h1>
-          <p>Manage your grocery products and stock levels.</p>
         </div>
 
         <button
@@ -217,7 +238,7 @@ function ProductManagement() {
 
         {products.length === 0 ? (
           <p className="py-8 text-center text-sm text-[#6c757d]">
-            No products have been added yet.
+            {loadError || 'No products have been added yet.'}
           </p>
         ) : (
           <table className="w-full border-collapse text-left text-sm">
@@ -255,50 +276,6 @@ function ProductManagement() {
                         type="button"
                         onClick={() => openEditForm(product)}
                         className="rounded-md border border-[#ced4da] px-3 py-1.5 text-sm hover:bg-[#f8f9fa]"
-          className="primary-button"
-          onClick={openAddForm}
-        >
-          + Add Product
-        </button>
-      </div>
-
-      <div className="product-table-container">
-        <table className="product-table">
-          <thead>
-            <tr>
-              <th>Product Name</th>
-              <th>Category</th>
-              <th>Price (LKR)</th>
-              <th>Minimum Stock</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {products.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="empty-products">
-                  No products added yet. Click “Add Product” to get started.
-                </td>
-              </tr>
-            ) : (
-              products.map((product) => (
-                <tr key={product.id}>
-                  <td>{product.name}</td>
-                  <td>{product.category}</td>
-                  <td>
-                    {product.price.toLocaleString('en-LK', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </td>
-                  <td>{product.minimumStock}</td>
-                  <td>
-                    <div className="product-actions">
-                      <button
-                        type="button"
-                        className="edit-button"
-                        onClick={() => openEditForm(product)}
                       >
                         Edit
                       </button>
@@ -307,8 +284,6 @@ function ProductManagement() {
                         type="button"
                         onClick={() => setDeletingProduct(product)}
                         className="rounded-md border border-[#dc3545] px-3 py-1.5 text-sm text-[#dc3545] hover:bg-[#fff5f5]"
-                        className="delete-button"
-                        onClick={() => setDeletingProduct(product)}
                       >
                         Delete
                       </button>
@@ -327,131 +302,6 @@ function ProductManagement() {
           onConfirm={() => handleConfirmDelete(deletingProduct.id)}
           onCancel={closeDeleteDialog}
         />
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {showForm && (
-        <div
-          className="modal-overlay"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) closeForm()
-          }}
-        >
-          <div
-            className="product-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="product-form-title"
-          >
-            <h2 id="product-form-title">
-              {editingProduct ? 'Edit Product' : 'Add Product'}
-            </h2>
-
-            <form onSubmit={handleSubmit} className="product-form">
-              <div className="form-field">
-                <label htmlFor="productName">Product Name</label>
-                <input
-                  id="productName"
-                  type="text"
-                  placeholder="Enter product name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  required
-                />
-              </div>
-              <CategoryDropdown
-                id="productCategory"
-                value={category}
-                onChange={setCategory}
-                required
-              />
-
-              <div className="form-field">
-                <label htmlFor="productPrice">Price (LKR)</label>
-                <input
-                  id="productPrice"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  placeholder="Enter price"
-                  value={price}
-                  onChange={(event) => setPrice(event.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="form-field">
-                <label htmlFor="minimumStock">Minimum Stock</label>
-                <input
-                  id="minimumStock"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="Enter minimum stock"
-                  value={minimumStock}
-                  onChange={(event) =>
-                    setMinimumStock(event.target.value)
-                  }
-                  required
-                />
-              </div>
-
-              <div className="product-form-actions">
-                <button
-                  type="button"
-                  className="cancel-button"
-                  onClick={closeForm}
-                >
-                  Cancel
-                </button>
-
-                <button type="submit" className="primary-button">
-                  {editingProduct ? 'Save Changes' : 'Save Product'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {deletingProduct && (
-        <div className="modal-overlay">
-          <div
-            className="product-modal delete-modal"
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="delete-dialog-title"
-          >
-            <h2 id="delete-dialog-title">Delete Product?</h2>
-
-            <p>
-              Are you sure you want to delete{' '}
-              <strong>{deletingProduct.name}</strong>? This action cannot be
-              undone.
-            </p>
-
-            <div className="product-form-actions">
-              <button
-                type="button"
-                className="cancel-button"
-                onClick={() => setDeletingProduct(null)}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="delete-button"
-                onClick={confirmDelete}
-              >
-                Delete Product
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   )

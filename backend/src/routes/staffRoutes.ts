@@ -1,9 +1,9 @@
 import express from "express";
 import bcrypt from "bcryptjs";
 
-import db from "../db";
+import db from "../config/db";
 
-import { authenticateToken, adminOnly } from "../middleware/auth";
+import { authenticateToken, adminOnly } from "../middleware/authMiddleware";
 
 const router = express.Router();
 
@@ -103,7 +103,8 @@ router.post("/", authenticateToken, adminOnly, async (req, res) => {
             name,
             username,
             email,
-            password
+            password,
+            role
         } = req.body;
 
 
@@ -115,6 +116,20 @@ router.post("/", authenticateToken, adminOnly, async (req, res) => {
 
             return res.status(400).json({
                 message: "Name, username, email and password are required"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // ROLE VALIDATION
+        // ---------------------------------------------
+
+        const normalizedRole = role === undefined ? "staff" : String(role).toLowerCase();
+
+        if (normalizedRole !== "admin" && normalizedRole !== "staff") {
+
+            return res.status(400).json({
+                message: "Role must be either 'admin' or 'staff'"
             });
         }
 
@@ -217,12 +232,13 @@ router.post("/", authenticateToken, adminOnly, async (req, res) => {
         const [result] = await db.execute<any>(
             `INSERT INTO users
             (name, username, email, password_hash, role)
-            VALUES (?, ?, ?, ?, 'staff')`,
+            VALUES (?, ?, ?, ?, ?)`,
             [
                 name,
                 username,
                 email,
-                passwordHash
+                passwordHash,
+                normalizedRole
             ]
         );
 
@@ -272,7 +288,8 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
             name,
             username,
             email,
-            password
+            password,
+            role
         } = req.body;
 
 
@@ -284,6 +301,20 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
 
             return res.status(400).json({
                 message: "Name, username and email are required"
+            });
+        }
+
+
+        // ---------------------------------------------
+        // ROLE VALIDATION
+        // ---------------------------------------------
+
+        const normalizedRole = role === undefined ? undefined : String(role).toLowerCase();
+
+        if (normalizedRole !== undefined && normalizedRole !== "admin" && normalizedRole !== "staff") {
+
+            return res.status(400).json({
+                message: "Role must be either 'admin' or 'staff'"
             });
         }
 
@@ -411,7 +442,8 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
                  SET name = ?,
                      username = ?,
                      email = ?,
-                     password_hash = ?
+                     password_hash = ?,
+                     role = COALESCE(?, role)
                  WHERE id = ?
                  AND role = 'staff'`,
                 [
@@ -419,6 +451,7 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
                     username,
                     email,
                     passwordHash,
+                    normalizedRole ?? null,
                     id
                 ]
             );
@@ -436,13 +469,15 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
                 `UPDATE users
                  SET name = ?,
                      username = ?,
-                     email = ?
+                     email = ?,
+                     role = COALESCE(?, role)
                  WHERE id = ?
                  AND role = 'staff'`,
                 [
                     name,
                     username,
                     email,
+                    normalizedRole ?? null,
                     id
                 ]
             );
