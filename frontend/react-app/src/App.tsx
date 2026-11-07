@@ -8,6 +8,7 @@ import SalesPage from './pages/SalesPage'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import CategoryManagement from './pages/CategoryManagement'
+import InventoryList from './components/InventoryList'
 
 
 function ProtectedRoute() {
@@ -46,8 +47,7 @@ function App() {
           }
         />
         <Route path="/products" element={<ProductManagement />} />
-      
-
+        <Route path="/stock" element={<InventoryList />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

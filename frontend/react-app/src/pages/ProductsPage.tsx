@@ -53,6 +53,17 @@ function toProduct(item: ApiProduct): Product {
   }
 }
 
+const STORAGE_KEY = 'grocerytrack-products'
+
+function loadProducts(): Product[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    return saved ? JSON.parse(saved) : sampleProducts
+  } catch {
+    return sampleProducts
+  }
+}
+
 function ProductsPage() {
   const { categories, categoryItems, refreshCategories } = useCategories()
   const [products, setProducts] = useState<Product[]>([])
@@ -166,6 +177,49 @@ function ProductsPage() {
 
     await loadProducts()
     setDeletingProduct(null)
+  }
+
+  function handleAdd(data: ProductFormData) {
+    setProducts((prev) => [
+      ...prev,
+      {
+        id: Math.max(0, ...prev.map((p) => p.id)) + 1,
+        name: data.name,
+        categoryName: data.category,
+        price: data.price,
+        currentStock: data.currentStock,
+        minStockLevel: data.minimumStock,
+        unit: data.unit,
+      } as Product,
+    ]);
+    setShowAdd(false);
+  }
+
+  // NEW: Edit save
+  function handleEditSave(data: ProductFormData) {
+    if (!editingProduct) return;
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === editingProduct.id
+          ? ({
+              ...p,
+              name: data.name,
+              categoryName: data.category,
+              price: data.price,
+              currentStock: data.currentStock,
+              minStockLevel: data.minimumStock,
+              unit: data.unit,
+            } as Product)
+          : p
+      )
+    );
+    setEditingProduct(null);
+  }
+
+  function handleConfirmDelete() {
+    if (!deletingProduct) return;
+    setProducts((prev) => prev.filter((p) => p.id !== deletingProduct.id));
+    setDeletingProduct(null);
   }
 
   return (
