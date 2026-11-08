@@ -358,6 +358,7 @@ if (!Number.isSafeInteger(saleId) || saleId <= 0) {
 // CANCEL SALE (ADMIN ONLY)
 // =========================
 
+
 router.put("/:id/cancel", authenticateToken, adminOnly, async (req, res) => {
 
     let connection: PoolConnection | undefined;
@@ -477,6 +478,27 @@ router.put("/:id/cancel", authenticateToken, adminOnly, async (req, res) => {
             [req.user.id, saleId]
         );
 
+        // Retrieve updated stock levels and recalculate low-stock status.
+        const [updatedProducts] = await connection.execute<RowDataPacket[]>(
+            `SELECT
+                p.product_id,
+                p.product_name,
+                p.current_stock AS stock_quantity,
+                p.minimum_stock,
+                CASE
+                    WHEN p.current_stock <= p.minimum_stock
+                    THEN 'LOW STOCK'
+                    ELSE 'AVAILABLE'
+                END AS stock_status
+             FROM products p
+             INNER JOIN sale_items si
+                ON p.product_id = si.product_id
+             WHERE si.sale_id = ?
+             ORDER BY p.product_id`,
+            [saleId]
+        );
+
+        // Commit after all database operations succeed.
         await connection.commit();
         transactionStarted = false;
 
@@ -484,13 +506,15 @@ router.put("/:id/cancel", authenticateToken, adminOnly, async (req, res) => {
             message: "Sale cancelled successfully",
             sale_id: saleId,
             cancelled_by: req.user.id,
-            restored_items: items.length
+            restored_items: items.length,
+            updated_products: updatedProducts
         });
 
     } catch (error: unknown) {
 
         if (connection && transactionStarted) {
             await connection.rollback();
+            transactionStarted = false;
         }
 
         console.error("Cancel sale error:", error);
@@ -501,8 +525,11 @@ router.put("/:id/cancel", authenticateToken, adminOnly, async (req, res) => {
 
     } finally {
 
-        connection?.release();
+        if (connection) {
+            connection.release();
+        }
     }
 });
+
 
 export default router;
