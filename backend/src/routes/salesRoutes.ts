@@ -184,19 +184,6 @@ router.post("/", authenticateToken, async (req, res) => {
                 ]
             );
 
-            await connection.execute<ResultSetHeader>(
-                `INSERT INTO sale_items
-                 (sale_id, product_id, quantity, unit_price, subtotal)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [
-                    saleId,
-                    item.product_id,
-                    item.quantity,
-                    item.unit_price,
-                    item.subtotal
-                ]
-            );
-
             const [updateResult] = await connection.execute<ResultSetHeader>(
                 `UPDATE products
                  SET current_stock = current_stock - ?
