@@ -312,19 +312,11 @@ router.get("/:id", authenticateToken, async (req, res) => {
     try {
         const saleId = Number(req.params.id);
 
-        if (!Number.isSafeInteger(saleId) || saleId <= 0) {
-            return res.status(400).json({
-                message: "Invalid sale ID"
-            });
-        }
-
-        const saleId = Number(req.params.id);
-
-        if (!Number.isInteger(saleId) || saleId <= 0) {
-            return res.status(400).json({
-                message: "Invalid sale ID"
-            });
-        }
+if (!Number.isSafeInteger(saleId) || saleId <= 0) {
+    return res.status(400).json({
+        message: "Invalid sale ID"
+    });
+}
 
         const [sales] = await db.execute<RowDataPacket[]>(`
             SELECT
