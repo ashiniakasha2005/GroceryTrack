@@ -27,7 +27,7 @@ type StockRow = {
 type Filter = 'all' | 'low'
 
 // Change this if your backend runs on a different port.
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
 // Shown only if the backend is not reachable, so the screen can still be demonstrated.
 const SAMPLE_DATA: StockRow[] = [
