@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import db from "../config/db";
-import { isNonNegativeInteger } from "../utils/validators";
 
 // GET /api/products
 export const getProducts = async (req: Request, res: Response) => {
@@ -162,58 +161,7 @@ export const createProduct = async (req: Request, res: Response) => {
 
 // PUT /api/products/:id
 export const updateProduct = async (req: Request, res: Response) => {
-
     try {
-
-        const {
-            name,
-            category_id,
-            price,
-            stock_quantity,
-            minimum_stock
-        } = req.body;
-
-        if (
-            !name ||
-            category_id === undefined ||
-            price === undefined
-        ) {
-            return res.status(400).json({
-                message: "Name, category_id and price are required"
-            });
-        }
-
-        const [result] = await db.execute<any>(`
-            INSERT INTO products
-            (product_name, category_id, price, current_stock, minimum_stock)
-            VALUES (?, ?, ?, ?, ?)
-        `, [
-            name,
-            category_id,
-            price,
-            stock_quantity ?? 0,
-            minimum_stock ?? 5
-        ]);
-
-        res.status(201).json({
-            message: "Product created successfully",
-            productId: result.insertId
-        });
-
-    } catch (error) {
-
-        res.status(500).json({
-            message: "Failed to create product",
-            error: error.message
-        });
-    }
-};
-
-// PUT /api/products/:id
-export const updateProduct = async (req: Request, res: Response) => {
-
-    try {
-
         const {
             name,
             category_id,
@@ -233,28 +181,7 @@ export const updateProduct = async (req: Request, res: Response) => {
             });
         }
 
-        const [result] = await db.execute<any>(`
-            UPDATE products
-            SET
-                product_name = ?,
-                category_id = ?,
-                price = ?,
-                minimum_stock = ?
-            WHERE product_id = ?
-        `, [
-            name,
-            category_id,
-            price,
-            price === undefined ||
-            minimum_stock === undefined
-        ) {
-            return res.status(400).json({
-                message:
-                    "Name, category_id, price and minimum_stock are required"
-            });
-        }
-
-                if (!isNonNegativeInteger(minimum_stock)) {
+        if (!Number.isInteger(minimum_stock) || minimum_stock < 0) {
             return res.status(400).json({
                 message: "minimum_stock must be a non-negative whole number"
             });
@@ -282,13 +209,12 @@ export const updateProduct = async (req: Request, res: Response) => {
             });
         }
 
-        res.json({
+        return res.json({
             message: "Product updated successfully"
         });
 
-    } catch (error) {
-
-        res.status(500).json({
+    } catch (error: any) {
+        return res.status(500).json({
             message: "Failed to update product",
             error: error.message
         });
@@ -327,17 +253,6 @@ export const updateMinimumStock = async (
         );
 
         if (products.length === 0) {
-// DELETE /api/products/:id
-export const deleteProduct = async (req: Request, res: Response) => {
-
-    try {
-
-        const [result] = await db.execute<any>(
-            "DELETE FROM products WHERE product_id = ?",
-            [req.params.id]
-        );
-
-        if (result.affectedRows === 0) {
             return res.status(404).json({
                 message: "Product not found"
             });
@@ -367,9 +282,7 @@ export const deleteProduct = async (req: Request, res: Response) => {
 
 // DELETE /api/products/:id
 export const deleteProduct = async (req: Request, res: Response) => {
-
     try {
-
         const [result] = await db.execute<any>(
             "DELETE FROM products WHERE product_id = ?",
             [req.params.id]
@@ -381,19 +294,38 @@ export const deleteProduct = async (req: Request, res: Response) => {
             });
         }
 
-        res.json({
+        return res.json({
             message: "Product deleted successfully"
         });
 
-        res.json({
-            message: "Product deleted successfully"
+    } catch (error: any) {
+        return res.status(500).json({
+            message: "Failed to delete product",
+            error: error.message
+        });
+    }
+};
+
+// GET /api/products/count
+export const getTotalProductCount = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const [result] = await db.execute<any>(`
+            SELECT COUNT(*) AS total_products
+            FROM products
+        `);
+
+        return res.status(200).json({
+            total_products: result[0].total_products
         });
 
     } catch (error) {
+        console.error("Get total product count error:", error);
 
-        res.status(500).json({
-            message: "Failed to delete product",
-            error: error.message
+        return res.status(500).json({
+            message: "Failed to get total product count"
         });
     }
 };
