@@ -62,17 +62,7 @@ const navItems: NavItem[] = [
       </svg>
     ),
   },
-    {
-    to: '/low-stock',
-    label: 'Low-Stock Alerts',
-    icon: (
-      <svg {...iconProps}>
-        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-        <path d="M12 9v4" />
-        <path d="M12 17h.01" />
-      </svg>
-    ),
-  },
+  
   {
     to: '/staff',
     label: 'Staff Management',
@@ -108,14 +98,13 @@ const pageTitles: Record<string, string> = {
   '/staff': 'Staff Management',
   '/products': 'Product Management',
   '/categories': 'Category Management',
-    '/low-stock': 'Low-Stock Alerts',
 }
 
 function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const [showNotifications, setShowNotifications] = useState(false)
+  
   const [showAccountMenu, setShowAccountMenu] = useState(false)
 
   // The account that is currently logged in (saved by the login page)
@@ -288,80 +277,7 @@ function AppShell() {
 
           {/* Right side */}
           <div className="relative flex items-center gap-4">
-            {/* Notification Area */}
-            <div className="relative">
-              <button
-                type="button"
-                aria-label="Notifications"
-                onClick={() => {
-                  setShowNotifications((current) => !current)
-                  setShowAccountMenu(false)
-                }}
-                className="relative flex h-8 w-8 items-center justify-center rounded-full text-[#6c757d] transition hover:bg-[#f8f9fa] hover:text-[#212529]"
-              >
-                <svg
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-                  <path d="M10 21h4" />
-                </svg>
-
-                {/* Notification dot */}
-                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-[#dc3545] ring-2 ring-white" />
-              </button>
-
-              {/* Notification Dropdown */}
-              {showNotifications && (
-                <div className="absolute right-0 top-[42px] z-50 w-[280px] overflow-hidden rounded-lg border border-[#e9ecef] bg-white shadow-[0_8px_30px_rgba(0,0,0,0.12)]">
-                  <div className="border-b border-[#e9ecef] px-4 py-3">
-                    <div className="text-xs font-semibold text-[#212529]">
-                      Notifications
-                    </div>
-
-                    <div className="mt-1 text-[10px] text-[#adb5bd]">
-                      Recent system notifications
-                    </div>
-                  </div>
-
-                  <div className="px-4 py-4">
-                    <div className="flex items-center gap-3 rounded-md bg-[#f8f9fa] p-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#cfe2ff] text-[#0d6efd]">
-                        <svg
-                          width="15"
-                          height="15"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.7"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M12 8v4l2.5 2.5" />
-                          <circle cx="12" cy="12" r="8.5" />
-                        </svg>
-                      </div>
-
-                      <div>
-                        <div className="text-[11px] font-medium text-[#495057]">
-                          No new notifications
-                        </div>
-
-                        <div className="mt-1 text-[10px] text-[#adb5bd]">
-                          You are all caught up.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            
 
             {/* Account Area */}
             <div className="relative">
@@ -370,7 +286,7 @@ function AppShell() {
                 aria-label="Account menu"
                 onClick={() => {
                   setShowAccountMenu((current) => !current)
-                  setShowNotifications(false)
+                  
                 }}
                 className="flex items-center gap-2 rounded-md border-none bg-transparent p-0 text-left transition hover:bg-[#f8f9fa]"
               >
