@@ -1,16 +1,44 @@
 import express from "express";
 import db from "../config/db";
-
 import { authenticateToken, adminOnly } from "../middleware/authMiddleware";
 
 const router = express.Router();
 
 
-// VIEW CURRENT INVENTORY
-router.get("/", authenticateToken, async (req, res) => {
-
+// ==========================================
+// US-010: LOW STOCK PRODUCTS (Must be before /:id)
+// ==========================================
+router.get("/low-stock/list", authenticateToken, async (req, res) => {
     try {
+        // FR-STOCK-01, FR-STOCK-02: current_stock <= minimum_stock
+        const [products] = await db.execute<any>(`
+            SELECT
+                p.product_id AS id,
+                p.product_name AS name,
+                p.current_stock AS current_stock,
+                p.minimum_stock,
+                (p.minimum_stock - p.current_stock) AS shortage
+            FROM products p
+            WHERE p.current_stock <= p.minimum_stock
+            ORDER BY p.current_stock ASC
+        `);
 
+        res.json(products);
+    } catch (error: any) {
+        console.error("Low stock error:", error);
+        res.status(500).json({
+            message: "Failed to get low-stock products",
+            error: error.message
+        });
+    }
+});
+
+
+// ==========================================
+// VIEW CURRENT INVENTORY
+// ==========================================
+router.get("/", authenticateToken, async (req, res) => {
+    try {
         const [inventory] = await db.execute<any>(`
             SELECT
                 p.product_id AS id,
@@ -31,9 +59,7 @@ router.get("/", authenticateToken, async (req, res) => {
         `);
 
         res.json(inventory);
-
-    } catch (error) {
-
+    } catch (error: any) {
         res.status(500).json({
             message: "Failed to get inventory",
             error: error.message
@@ -42,11 +68,11 @@ router.get("/", authenticateToken, async (req, res) => {
 });
 
 
-// UPDATE STOCK
+// ==========================================
+// UPDATE STOCK (Admin Only)
+// ==========================================
 router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
-
     try {
-
         const { quantity } = req.body;
 
         if (quantity === undefined || quantity < 0) {
@@ -59,10 +85,7 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
             `UPDATE products
              SET current_stock = ?
              WHERE product_id = ?`,
-            [
-                quantity,
-                req.params.id
-            ]
+            [quantity, req.params.id]
         );
 
         if (result.affectedRows === 0) {
@@ -74,43 +97,12 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
         res.json({
             message: "Stock updated successfully"
         });
-
-    } catch (error) {
-
+    } catch (error: any) {
         res.status(500).json({
             message: "Failed to update stock",
             error: error.message
         });
     }
 });
-
-
-// LOW STOCK PRODUCTS
-router.get("/low-stock/list", authenticateToken, async (req, res) => {
-
-    try {
-
-        const [products] = await db.execute<any>(`
-            SELECT
-                p.product_id AS id,
-                p.product_name AS name,
-                p.current_stock AS stock_quantity,
-                p.minimum_stock
-            FROM products p
-            WHERE p.current_stock <= p.minimum_stock
-            ORDER BY p.current_stock ASC
-        `);
-
-        res.json(products);
-
-    } catch (error) {
-
-        res.status(500).json({
-            message: "Failed to get low-stock products",
-            error: error.message
-        });
-    }
-});
-
 
 export default router;
