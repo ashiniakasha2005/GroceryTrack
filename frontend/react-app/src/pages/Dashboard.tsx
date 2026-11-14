@@ -1,26 +1,25 @@
+
+import { useEffect, useState } from "react";
 import { DollarSign, Package, CheckSquare, AlertTriangle } from "lucide-react";
 import SummaryCard from "../components/dashboard/SummaryCard";
 
 type DashboardStats = {
   salesToday: number | null;
-  salesChangePct: number | null; // % change vs yesterday
+  salesChangePct: number | null;
   totalProducts: number | null;
-  addedThisWeek: number | null; // net change this week, can be negative
+  addedThisWeek: number | null;
   totalTransactions: number | null;
   lowStockCount: number | null;
 };
 
-// null means "no data yet". FE-04 (Senadi) will fill these from the API.
-const stats: DashboardStats = {
-  salesToday: null,
-  salesChangePct: null,
-  totalProducts: null,
-  addedThisWeek: null,
-  totalTransactions: null,
-  lowStockCount: null,
+type DashboardApiResponse = {
+  today_sales: number | string;
+  total_products: number;
+  total_sales: number;
+  low_stock_products: number;
+  message?: string;
 };
 
-// Longer than this and the number is shortened (42,850,000 -> 42.85M)
 const MAX_CHARS = 12;
 
 type Shown = { text: string; full: string };
@@ -33,20 +32,84 @@ const compact = (n: number) =>
 
 const showCount = (n: number | null): Shown => {
   if (n === null) return { text: "—", full: "—" };
+
   const full = n.toLocaleString("en-US");
   return { text: full.length > MAX_CHARS ? compact(n) : full, full };
 };
 
 const showMoney = (n: number | null): Shown => {
   if (n === null) return { text: "—", full: "—" };
+
   const full = `RS ${n.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-  return { text: full.length > MAX_CHARS ? `RS ${compact(n)}` : full, full };
+
+  return {
+    text: full.length > MAX_CHARS ? `RS ${compact(n)}` : full,
+    full,
+  };
 };
 
 export default function Dashboard() {
+  const [stats, setStats] = useState<DashboardStats>({
+    salesToday: null,
+    salesChangePct: null,
+    totalProducts: null,
+    addedThisWeek: null,
+    totalTransactions: null,
+    lowStockCount: null,
+  });
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const token = localStorage.getItem("token");
+
+        if (!token) {
+          throw new Error("Please log in to view the dashboard.");
+        }
+
+        const response = await fetch(
+          "http://localhost:3000/api/dashboard",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data: DashboardApiResponse = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to load dashboard.");
+        }
+
+        setStats({
+          salesToday: Number(data.today_sales),
+          salesChangePct: null,
+          totalProducts: Number(data.total_products),
+          addedThisWeek: null,
+          totalTransactions: Number(data.total_sales),
+          lowStockCount: Number(data.low_stock_products),
+        });
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Something went wrong while loading the dashboard."
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboard();
+  }, []);
+
   const pct = stats.salesChangePct;
   const added = stats.addedThisWeek;
   const low = stats.lowStockCount;
@@ -59,8 +122,22 @@ export default function Dashboard() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-[18px] font-bold text-[#212529]">Dashboard</h1>
+        <h1 className="text-[18px] font-bold text-[#212529]">
+          Dashboard
+        </h1>
       </div>
+
+      {loading && (
+        <p className="mb-4 text-sm text-gray-500">
+          Loading dashboard...
+        </p>
+      )}
+
+      {error && (
+        <p className="mb-4 text-sm text-red-600">
+          {error}
+        </p>
+      )}
 
       <div className="mb-6 grid grid-cols-1 gap-[18px] sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
@@ -89,7 +166,11 @@ export default function Dashboard() {
               : `${added} added this week`
           }
           arrow={
-            added === null || added === 0 ? undefined : added > 0 ? "up" : "down"
+            added === null || added === 0
+              ? undefined
+              : added > 0
+              ? "up"
+              : "down"
           }
           icon={Package}
           variant="primary"
@@ -99,7 +180,7 @@ export default function Dashboard() {
           title="Total Transactions"
           value={transactions.text}
           fullValue={transactions.full}
-          subtext="Today's completed sales"
+          subtext="Completed sales transactions"
           icon={CheckSquare}
           variant="neutral"
         />
