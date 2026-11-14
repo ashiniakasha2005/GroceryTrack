@@ -19,6 +19,7 @@ router.get("/low-stock/list", authenticateToken, async (req, res) => {
                 (p.minimum_stock - p.current_stock) AS shortage
             FROM products p
             WHERE p.current_stock <= p.minimum_stock
+                AND p.is_active = 1
             ORDER BY p.current_stock ASC
         `);
         res.json(products);
@@ -47,6 +48,7 @@ router.get("/", authenticateToken, async (req, res) => {
                 END AS stock_status
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.category_id
+            WHERE p.is_active = 1 
             ORDER BY p.current_stock ASC
         `);
         res.json(inventory);
@@ -180,6 +182,7 @@ router.get("/low-stock/count", authenticateToken, async (req, res) => {
             SELECT COUNT(*) AS low_stock_count
             FROM products
             WHERE current_stock <= minimum_stock
+                AND is_active = 1
         `);
         res.json({ low_stock_count: rows[0].low_stock_count });
     } catch (error: any) {

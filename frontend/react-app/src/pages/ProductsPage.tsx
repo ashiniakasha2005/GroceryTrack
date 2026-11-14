@@ -8,6 +8,7 @@ import type { Product } from '../types/product'
 import SearchBar from '../components/SearchBar'
 import { useCategories } from '../context/CategoryContext'
 import { isLowStock } from '../utils/stock'
+import { useNavigate } from 'react-router-dom'
 
 const API_URL = 'http://localhost:3000/api'
 
@@ -53,6 +54,7 @@ function toProduct(item: ApiProduct): Product {
 }
 
 function ProductsPage() {
+  const navigate = useNavigate()
   const { categories, categoryItems, refreshCategories } = useCategories()
   const [products, setProducts] = useState<Product[]>([])
   const [loadError, setLoadError] = useState('')
@@ -207,6 +209,7 @@ function ProductsPage() {
             </select>
           </div>
         }
+        onAddCategory={() => navigate('/categories')}
         onAdd={() => {
           setEditingProduct(null)
           setShowForm(true)

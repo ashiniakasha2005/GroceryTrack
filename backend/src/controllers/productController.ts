@@ -17,6 +17,7 @@ export const getProducts = async (req: Request, res: Response) => {
             FROM products p
             LEFT JOIN categories c
                 ON p.category_id = c.category_id
+            WHERE p.is_active = 1
             ORDER BY p.product_id DESC
         `);
         res.json(products);
@@ -44,6 +45,7 @@ export const searchProducts = async (req: Request, res: Response) => {
             LEFT JOIN categories c
                 ON p.category_id = c.category_id
             WHERE p.product_name LIKE ?
+            AND p.is_active = 1
         `, [search]);
         res.json(products);
     } catch (error) {
@@ -70,6 +72,7 @@ export const getProductById = async (req: Request, res: Response) => {
             LEFT JOIN categories c
                 ON p.category_id = c.category_id
             WHERE p.product_id = ?
+            AND p.is_active = 1 
         `, [req.params.id]);
 
         if (products.length === 0) {
@@ -215,7 +218,7 @@ export const updateMinimumStock = async (req: Request, res: Response) => {
 export const deleteProduct = async (req: Request, res: Response) => {
     try {
         const [result] = await db.execute<any>(
-            "DELETE FROM products WHERE product_id = ?",
+            "UPDATE products SET is_active = 0 WHERE product_id = ?",
             [req.params.id]
         );
 
@@ -223,17 +226,17 @@ export const deleteProduct = async (req: Request, res: Response) => {
             return res.status(404).json({ message: "Product not found" });
         }
 
-        return res.json({ message: "Product deleted successfully" });
+        return res.json({ message: "Product hidden successfully" });
     } catch (error: any) {
         // Foreign key constraint error එක අල්ලගන්නවා (MySQL Error 1451)
         if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.errno === 1451) {
             return res.status(409).json({
-                message: "Cannot delete this product because it has existing sales records or stock history."
+                message: "Cannot hide this product because it has existing sales records or stock history."
             });
         }
 
         return res.status(500).json({
-            message: "Failed to delete product",
+            message: "Failed to hide product",
             error: error.message
         });
     }
