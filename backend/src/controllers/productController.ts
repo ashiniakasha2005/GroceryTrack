@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import db from "../config/db";
-import { isNonNegativeInteger } from "../utils/validators";
 
 // GET /api/products
 export const getProducts = async (req: Request, res: Response) => {
@@ -303,6 +302,30 @@ export const deleteProduct = async (req: Request, res: Response) => {
         return res.status(500).json({
             message: "Failed to delete product",
             error: error.message
+        });
+    }
+};
+
+// GET /api/products/count
+export const getTotalProductCount = async (
+    req: Request,
+    res: Response
+) => {
+    try {
+        const [result] = await db.execute<any>(`
+            SELECT COUNT(*) AS total_products
+            FROM products
+        `);
+
+        return res.status(200).json({
+            total_products: result[0].total_products
+        });
+
+    } catch (error) {
+        console.error("Get total product count error:", error);
+
+        return res.status(500).json({
+            message: "Failed to get total product count"
         });
     }
 };
