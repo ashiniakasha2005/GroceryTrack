@@ -13,7 +13,7 @@ router.get("/", authenticateToken, async (req, res) => {
                 COALESCE(SUM(total_amount), 0) AS today_sales
             FROM sales
             WHERE DATE(sale_date_time) = CURDATE()
-            AND status = 'completed'
+              AND status = 'completed'
         `);
 
         // Total number of products (FR-DASH-02)
@@ -28,8 +28,6 @@ router.get("/", authenticateToken, async (req, res) => {
             FROM sales
             WHERE status = 'completed'
         `);
-
-        // Current count of low stock products (FR-DASH-04)
         const [lowStock] = await db.execute<any>(`
             SELECT COUNT(*) AS low_stock_products
             FROM products
@@ -51,5 +49,6 @@ router.get("/", authenticateToken, async (req, res) => {
         });
     }
 });
+
 
 export default router;

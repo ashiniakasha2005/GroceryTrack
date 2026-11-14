@@ -8,6 +8,7 @@ import SalesPage from './pages/SalesPage'
 import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import CategoryManagement from './pages/CategoryManagement'
+import InventoryList from './components/InventoryList'
 
 
 function ProtectedRoute() {
@@ -29,10 +30,24 @@ function App() {
         <Route path="/sales" element={<SalesPage />} />
         <Route path="/staff" element={<StaffManagement />} />
         <Route path="/products" element={<ProductManagement />} />
-        <Route path="/categories" element={<CategoryManagement />} />
-        <Route path="/products" element={<ProductManagement />} />
-      
+                <Route
+          path="/categories"
+          element={
+            (() => {
+              try {
+                const user = JSON.parse(localStorage.getItem('user') ?? 'null')
 
+                return user?.role?.toLowerCase() === 'admin'
+                  ? <CategoryManagement />
+                  : <Navigate to="/dashboard" replace />
+              } catch {
+                return <Navigate to="/dashboard" replace />
+              }
+            })()
+          }
+        />
+        <Route path="/products" element={<ProductManagement />} />
+        <Route path="/stock" element={<InventoryList />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

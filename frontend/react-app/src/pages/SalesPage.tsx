@@ -35,8 +35,8 @@ async function request(endpoint: string, options: RequestInit = {}) {
   const token = localStorage.getItem('token')
 
   if (!token) {
-  throw new Error('Please log in to continue.')
-}
+    throw new Error('Please log in to continue.')
+  }
 
   const response = await fetch(`${API_URL}${endpoint}`, {
     ...options,
@@ -64,6 +64,7 @@ export default function SalesPage() {
   const [loadError, setLoadError] = useState('')
   const [checkoutMessage, setCheckoutMessage] = useState('')
   const [checkoutError, setCheckoutError] = useState('')
+  const [stockErrors, setStockErrors] = useState<Record<number, string>>({})
   const [checkingOut, setCheckingOut] = useState(false)
 
   // Fetch products from backend
@@ -121,7 +122,10 @@ export default function SalesPage() {
     setCheckoutError('')
 
     if (product.currentStock <= 0) {
-      setCheckoutError('This product is out of stock.')
+      setStockErrors((prev) => ({
+        ...prev,
+        [product.id]: 'This product is out of stock.',
+      }))
       return
     }
 
@@ -131,11 +135,18 @@ export default function SalesPage() {
 
     if (existingItem) {
       if (existingItem.quantity >= product.currentStock) {
-        setCheckoutError(
-          'You cannot add more than the available stock.',
-        )
+        setStockErrors((prev) => ({
+          ...prev,
+          [product.id]: `Insufficient stock! Only ${product.currentStock} units available.`,
+        }))
         return
       }
+
+      setStockErrors((prev) => {
+        const updatedErrors = { ...prev }
+        delete updatedErrors[product.id]
+        return updatedErrors
+      })
 
       setCart(
         cart.map((item) =>
@@ -165,11 +176,17 @@ export default function SalesPage() {
     const newQuantity = existingItem.quantity + change
 
     if (newQuantity > existingItem.product.currentStock) {
-      setCheckoutError(
-        'You cannot exceed the available stock.',
-      )
+      setStockErrors((prev) => ({
+        ...prev,
+        [productId]: `Insufficient stock! Only ${existingItem.product.currentStock} units available.`,
+      }))
       return
     }
+    setStockErrors((prev) => {
+      const updatedErrors = { ...prev }
+      delete updatedErrors[productId]
+      return updatedErrors
+    })
 
     setCart(
       cart
@@ -459,6 +476,12 @@ export default function SalesPage() {
                         </p>
                       </div>
 
+                      {stockErrors[item.product.id] && (
+                        <p className="mt-2 text-xs font-medium text-red-600" role="alert">
+                          {stockErrors[item.product.id]}
+                        </p>
+                      )}
+
                       {/* Quantity controls */}
                       <div className="mt-2 flex items-center gap-2">
                         <button
@@ -480,9 +503,7 @@ export default function SalesPage() {
                           onClick={() =>
                             changeQuantity(item.product.id, 1)
                           }
-                          disabled={
-                            item.quantity >= item.product.currentStock
-                          }
+
                           className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           +
