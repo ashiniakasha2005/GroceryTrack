@@ -197,8 +197,7 @@ router.post("/:id/restock", authenticateToken, adminOnly, async (req, res) => {
 });
 
 
-
-// LOW STOCK PRODUCTS
+// LOW STOCK PRODUCTS (BE-05)
 router.get("/low-stock/list", authenticateToken, async (req, res) => {
 
     try {
@@ -207,11 +206,15 @@ router.get("/low-stock/list", authenticateToken, async (req, res) => {
             SELECT
                 p.product_id AS id,
                 p.product_name AS name,
+                c.category_name AS category,
                 p.current_stock AS stock_quantity,
+                p.unit,
                 p.minimum_stock
             FROM products p
+            LEFT JOIN categories c
+                ON p.category_id = c.category_id
             WHERE p.current_stock <= p.minimum_stock
-            ORDER BY p.current_stock ASC
+            ORDER BY p.current_stock ASC, p.product_name ASC
         `);
 
         res.json(products);
@@ -225,5 +228,28 @@ router.get("/low-stock/list", authenticateToken, async (req, res) => {
     }
 });
 
+// LOW STOCK COUNT (BE-06)
+router.get("/low-stock/count", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [rows] = await db.execute<any>(`
+            SELECT COUNT(*) AS low_stock_count
+            FROM products
+            WHERE current_stock <= minimum_stock
+        `);
+
+        res.json({
+            low_stock_count: rows[0].low_stock_count
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get low-stock count",
+            error: error.message
+        });
+    }
+});
 
 export default router;
