@@ -124,6 +124,15 @@ export const createProduct = async (req: Request, res: Response) => {
             });
         }
 
+        if (
+            (stock_quantity !== undefined && !isNonNegativeInteger(stock_quantity)) ||
+            (minimum_stock !== undefined && !isNonNegativeInteger(minimum_stock))
+        ) {
+            return res.status(400).json({
+                message: "stock_quantity and minimum_stock must be non-negative whole numbers"
+            });
+        }
+
         const [result] = await db.execute<any>(`
             INSERT INTO products
             (product_name, category_id, price, current_stock, minimum_stock)
@@ -152,9 +161,7 @@ export const createProduct = async (req: Request, res: Response) => {
 
 // PUT /api/products/:id
 export const updateProduct = async (req: Request, res: Response) => {
-
     try {
-
         const {
             name,
             category_id,
@@ -171,6 +178,12 @@ export const updateProduct = async (req: Request, res: Response) => {
             return res.status(400).json({
                 message:
                     "Name, category_id, price and minimum_stock are required"
+            });
+        }
+
+        if (!Number.isInteger(minimum_stock) || minimum_stock < 0) {
+            return res.status(400).json({
+                message: "minimum_stock must be a non-negative whole number"
             });
         }
 
@@ -196,13 +209,12 @@ export const updateProduct = async (req: Request, res: Response) => {
             });
         }
 
-        res.json({
+        return res.json({
             message: "Product updated successfully"
         });
 
-    } catch (error) {
-
-        res.status(500).json({
+    } catch (error: any) {
+        return res.status(500).json({
             message: "Failed to update product",
             error: error.message
         });
@@ -270,9 +282,7 @@ export const updateMinimumStock = async (
 
 // DELETE /api/products/:id
 export const deleteProduct = async (req: Request, res: Response) => {
-
     try {
-
         const [result] = await db.execute<any>(
             "DELETE FROM products WHERE product_id = ?",
             [req.params.id]
@@ -284,13 +294,12 @@ export const deleteProduct = async (req: Request, res: Response) => {
             });
         }
 
-        res.json({
+        return res.json({
             message: "Product deleted successfully"
         });
 
-    } catch (error) {
-
-        res.status(500).json({
+    } catch (error: any) {
+        return res.status(500).json({
             message: "Failed to delete product",
             error: error.message
         });

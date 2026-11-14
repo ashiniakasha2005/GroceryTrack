@@ -11,7 +11,6 @@ import {
     getTotalProductCount
 } from "../controllers/productController";
 
-
 const router = express.Router();
 
 router.get("/", authenticateToken, getProducts);
@@ -21,6 +20,7 @@ router.get("/:id", authenticateToken, getProductById);
 router.post("/", authenticateToken, adminOnly, createProduct);
 router.put("/:id", authenticateToken, adminOnly, updateProduct);
 router.delete("/:id", authenticateToken, adminOnly, deleteProduct);
+
 router.patch(
     "/:id/minimum-stock",
     authenticateToken,

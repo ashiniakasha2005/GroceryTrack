@@ -43,12 +43,18 @@ router.get("/", authenticateToken, async (req, res) => {
 });
 
 
+
 // UPDATE STOCK (SET EXACT QUANTITY)
 router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
-
     try {
-
         const { quantity } = req.body;
+        const productId = Number(req.params.id);
+
+        if (!Number.isSafeInteger(productId) || productId <= 0) {
+            return res.status(400).json({
+                message: "Invalid product ID"
+            });
+        }
 
         if (!isNonNegativeInteger(quantity)) {
             return res.status(400).json({
@@ -60,25 +66,48 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
             `UPDATE products
              SET current_stock = ?
              WHERE product_id = ?`,
-            [
-                quantity,
-                req.params.id
-            ]
+            [quantity, productId]
         );
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({
-                message: "Product not found"
-            });
+            // Check whether the product exists.
+            const [existingProduct] = await db.execute<any>(
+                `SELECT product_id
+         FROM products
+         WHERE product_id = ?`,
+                [productId]
+            );
+
+            if (existingProduct.length === 0) {
+                return res.status(404).json({
+                    message: "Product not found"
+                });
+            }
         }
 
-        res.json({
-            message: "Stock updated successfully"
+        const [rows] = await db.execute<any>(
+            `SELECT
+                product_id,
+                product_name,
+                current_stock AS stock_quantity,
+                minimum_stock,
+                CASE
+                    WHEN current_stock <= minimum_stock
+                    THEN 'LOW STOCK'
+                    ELSE 'AVAILABLE'
+                END AS stock_status
+             FROM products
+             WHERE product_id = ?`,
+            [productId]
+        );
+
+        return res.json({
+            message: "Stock updated successfully",
+            product: rows[0]
         });
 
-    } catch (error) {
-
-        res.status(500).json({
+    } catch (error: any) {
+        return res.status(500).json({
             message: "Failed to update stock",
             error: error.message
         });
@@ -86,10 +115,18 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
 });
 
 
+
+
 // RESTOCK PRODUCT (ADD QUANTITY)
 router.post("/:id/restock", authenticateToken, adminOnly, async (req, res) => {
-
+    const productId = Number(req.params.id);
     const { quantity } = req.body;
+
+    if (!Number.isSafeInteger(productId) || productId <= 0) {
+        return res.status(400).json({
+            message: "Invalid product ID"
+        });
+    }
 
     if (!isPositiveInteger(quantity)) {
         return res.status(400).json({
@@ -100,14 +137,13 @@ router.post("/:id/restock", authenticateToken, adminOnly, async (req, res) => {
     const connection = await db.getConnection();
 
     try {
-
         await connection.beginTransaction();
 
         const [result] = await connection.execute<any>(
             `UPDATE products
              SET current_stock = current_stock + ?
              WHERE product_id = ?`,
-            [quantity, req.params.id]
+            [quantity, productId]
         );
 
         if (result.affectedRows === 0) {
@@ -121,44 +157,47 @@ router.post("/:id/restock", authenticateToken, adminOnly, async (req, res) => {
             `INSERT INTO stock_movements
              (product_id, change_qty, reason, user_id)
              VALUES (?, ?, 'RESTOCK', ?)`,
-            [req.params.id, quantity, req.user?.id ?? null]
+            [productId, quantity, req.user?.id ?? null]
         );
-
-        await connection.commit();
 
         const [rows] = await connection.execute<any>(
             `SELECT
                 product_id,
                 product_name,
                 current_stock AS stock_quantity,
-                minimum_stock
+                minimum_stock,
+                CASE
+                    WHEN current_stock <= minimum_stock
+                    THEN 'LOW STOCK'
+                    ELSE 'AVAILABLE'
+                END AS stock_status
              FROM products
              WHERE product_id = ?`,
-            [req.params.id]
+            [productId]
         );
 
-        res.json({
+        await connection.commit();
+
+        return res.json({
             message: "Stock restocked successfully",
             product: rows[0]
         });
 
-    } catch (error) {
-
+    } catch (error: any) {
         await connection.rollback();
 
-        res.status(500).json({
+        return res.status(500).json({
             message: "Failed to restock product",
             error: error.message
         });
 
     } finally {
-
         connection.release();
     }
 });
 
 
-// LOW STOCK PRODUCTS
+// LOW STOCK PRODUCTS (BE-05)
 router.get("/low-stock/list", authenticateToken, async (req, res) => {
 
     try {
@@ -167,11 +206,15 @@ router.get("/low-stock/list", authenticateToken, async (req, res) => {
             SELECT
                 p.product_id AS id,
                 p.product_name AS name,
+                c.category_name AS category,
                 p.current_stock AS stock_quantity,
+                p.unit,
                 p.minimum_stock
             FROM products p
+            LEFT JOIN categories c
+                ON p.category_id = c.category_id
             WHERE p.current_stock <= p.minimum_stock
-            ORDER BY p.current_stock ASC
+            ORDER BY p.current_stock ASC, p.product_name ASC
         `);
 
         res.json(products);
@@ -185,5 +228,28 @@ router.get("/low-stock/list", authenticateToken, async (req, res) => {
     }
 });
 
+// LOW STOCK COUNT (BE-06)
+router.get("/low-stock/count", authenticateToken, async (req, res) => {
+
+    try {
+
+        const [rows] = await db.execute<any>(`
+            SELECT COUNT(*) AS low_stock_count
+            FROM products
+            WHERE current_stock <= minimum_stock
+        `);
+
+        res.json({
+            low_stock_count: rows[0].low_stock_count
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            message: "Failed to get low-stock count",
+            error: error.message
+        });
+    }
+});
 
 export default router;
