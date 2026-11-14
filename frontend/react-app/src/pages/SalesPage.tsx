@@ -1,4 +1,3 @@
-
 import { useEffect, useMemo, useState } from 'react'
 import type { Product } from '../types/product'
 
@@ -91,9 +90,26 @@ export default function SalesPage() {
     }
   }
 
+  // FIXED: Moved the async logic inside the effect to avoid warning
   useEffect(() => {
-    void fetchProducts()
-  }, [])
+    let isMounted = true;
+    const loadData = async () => {
+      try {
+        const data = await request('/products');
+        if (!isMounted) return;
+        const productList = Array.isArray(data) ? data : data.products;
+        setProducts(productList.map((item: ApiProduct) => toProduct(item)));
+      } catch (error) {
+        if (!isMounted) return;
+        setLoadError(error instanceof Error ? error.message : 'Unable to load products.');
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    
+    void loadData();
+    return () => { isMounted = false; };
+  }, []);
 
   // Search products by name or category
   const filteredProducts = useMemo(() => {
@@ -307,66 +323,39 @@ export default function SalesPage() {
               <table className="w-full min-w-[600px] text-left">
                 <thead>
                   <tr className="border-b border-gray-200 bg-gray-50/70 text-xs uppercase tracking-wider text-gray-400">
-                    <th className="px-4 py-3 font-bold">
-                      Product Name
-                    </th>
-
-                    <th className="px-4 py-3 font-bold">
-                      Category
-                    </th>
-
-                    <th className="px-4 py-3 font-bold">
-                      Price
-                    </th>
-
-                    <th className="px-4 py-3 font-bold">
-                      Available Stock
-                    </th>
-
-                    <th className="px-4 py-3 text-right font-bold">
-                      Action
-                    </th>
+                    <th className="px-4 py-3 font-bold">Product Name</th>
+                    <th className="px-4 py-3 font-bold">Category</th>
+                    <th className="px-4 py-3 font-bold">Price</th>
+                    <th className="px-4 py-3 font-bold">Available Stock</th>
+                    <th className="px-4 py-3 text-right font-bold">Action</th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td
-                        colSpan={5}
-                        className="py-10 text-center text-sm text-gray-500"
-                      >
+                      <td colSpan={5} className="py-10 text-center text-sm text-gray-500">
                         Loading products...
                       </td>
                     </tr>
                   ) : filteredProducts.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={5}
-                        className="py-10 text-center text-sm text-gray-500"
-                      >
+                      <td colSpan={5} className="py-10 text-center text-sm text-gray-500">
                         No products found.
                       </td>
                     </tr>
                   ) : (
                     filteredProducts.map((product) => (
-                      <tr
-                        key={product.id}
-                        className="border-b border-gray-100 transition hover:bg-gray-50"
-                      >
+                      <tr key={product.id} className="border-b border-gray-100 transition hover:bg-gray-50">
                         <td className="px-4 py-4 text-sm font-medium text-gray-800">
                           {product.name}
                         </td>
-
                         <td className="px-4 py-4 text-xs text-gray-500">
                           {product.categoryName}
                         </td>
-
                         <td className="px-4 py-4 text-xs font-medium text-gray-700">
                           Rs. {product.price.toFixed(2)}
                         </td>
-
-                        {/* Available stock */}
                         <td className="px-4 py-4 text-xs">
                           {product.currentStock > 0 ? (
                             <span className="font-medium text-red-500">
@@ -379,7 +368,6 @@ export default function SalesPage() {
                             </span>
                           )}
                         </td>
-
                         <td className="px-4 py-4 text-right">
                           <button
                             type="button"
@@ -387,9 +375,7 @@ export default function SalesPage() {
                             disabled={product.currentStock <= 0}
                             className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
                           >
-                            {product.currentStock <= 0
-                              ? 'Out of stock'
-                              : '+ Add'}
+                            {product.currentStock <= 0 ? 'Out of stock' : '+ Add'}
                           </button>
                         </td>
                       </tr>
@@ -402,77 +388,35 @@ export default function SalesPage() {
 
           {/* Current sale / Cart */}
           <section className="flex flex-col justify-between rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-
             <div>
               {/* Cart header */}
               <div className="mb-4 flex items-center gap-2 border-b border-gray-200 pb-3">
-                <svg
-                  className="h-5 w-5 text-blue-600"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H19m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                  />
+                <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H19m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-
-                <h2 className="text-base font-semibold text-gray-900">
-                  Cart / Checkout
-                </h2>
+                <h2 className="text-base font-semibold text-gray-900">Cart / Checkout</h2>
               </div>
 
               {/* Cart items or empty state */}
               {cart.length === 0 ? (
                 <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
-                  <svg
-                    className="mb-3 h-12 w-12 text-gray-200"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="1"
-                      d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H19m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-                    />
+                  <svg className="mb-3 h-12 w-12 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H19m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
-
-                  <p className="text-sm font-medium text-gray-400">
-                    Cart is empty.
-                  </p>
-
-                  <p className="mt-1 text-xs text-gray-400">
-                    Add products from the left panel.
-                  </p>
+                  <p className="text-sm font-medium text-gray-400">Cart is empty.</p>
+                  <p className="mt-1 text-xs text-gray-400">Add products from the left panel.</p>
                 </div>
               ) : (
                 <div className="max-h-[40vh] space-y-4 overflow-y-auto pr-1">
                   {cart.map((item) => (
-                    <div
-                      key={item.product.id}
-                      className="border-b border-gray-100 pb-3"
-                    >
+                    <div key={item.product.id} className="border-b border-gray-100 pb-3">
                       <div className="flex justify-between gap-3">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {item.product.name}
-                          </p>
-
-                          <p className="text-xs text-gray-400">
-                            Rs. {item.product.price.toFixed(2)} each
-                          </p>
+                          <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                          <p className="text-xs text-gray-400">Rs. {item.product.price.toFixed(2)} each</p>
                         </div>
-
                         <p className="text-sm font-semibold text-gray-900">
-                          Rs.{' '}
-                          {(
-                            item.product.price * item.quantity
-                          ).toFixed(2)}
+                          Rs. {(item.product.price * item.quantity).toFixed(2)}
                         </p>
                       </div>
 
@@ -482,28 +426,20 @@ export default function SalesPage() {
                         </p>
                       )}
 
-                      {/* Quantity controls */}
                       <div className="mt-2 flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() =>
-                            changeQuantity(item.product.id, -1)
-                          }
+                          onClick={() => changeQuantity(item.product.id, -1)}
                           className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-xs text-gray-600 hover:bg-gray-50"
                         >
                           -
                         </button>
-
                         <span className="min-w-5 text-center text-xs font-semibold text-gray-800">
                           {item.quantity}
                         </span>
-
                         <button
                           type="button"
-                          onClick={() =>
-                            changeQuantity(item.product.id, 1)
-                          }
-
+                          onClick={() => changeQuantity(item.product.id, 1)}
                           className="flex h-6 w-6 items-center justify-center rounded border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           +
@@ -517,22 +453,13 @@ export default function SalesPage() {
 
             {/* Total, payment method and checkout */}
             <div className="mt-6 space-y-4 border-t border-gray-200 pt-4">
-
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-900">
-                  Total Amount
-                </span>
-
-                <span className="text-xl font-bold text-gray-900">
-                  Rs. {total.toFixed(2)}
-                </span>
+                <span className="text-sm font-semibold text-gray-900">Total Amount</span>
+                <span className="text-xl font-bold text-gray-900">Rs. {total.toFixed(2)}</span>
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-medium text-gray-400">
-                  Payment Method
-                </label>
-
+                <label className="mb-1 block text-xs font-medium text-gray-400">Payment Method</label>
                 <div className="w-full rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2 text-center text-sm font-medium text-blue-600">
                   Cash
                 </div>
@@ -548,20 +475,9 @@ export default function SalesPage() {
                   'Processing...'
                 ) : (
                   <>
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2.5"
-                        d="M5 13l4 4L19 7"
-                      />
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
                     </svg>
-
                     Confirm Sale
                   </>
                 )}

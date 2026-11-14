@@ -48,19 +48,7 @@ function toProduct(item: ApiProduct): Product {
     price: Number(item.price),
     currentStock: Number(item.stock_quantity),
     minStockLevel: Number(item.minimum_stock),
-    // The database does not store a unit yet
-    unit: 'pcs',
-  }
-}
-
-const STORAGE_KEY = 'grocerytrack-products'
-
-function loadProducts(): Product[] {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) : sampleProducts
-  } catch {
-    return sampleProducts
+    unit: 'pcs', // The database does not store a unit yet
   }
 }
 
@@ -76,7 +64,6 @@ function ProductsPage() {
 
   const loadProducts = useCallback(async () => {
     const data: ApiProduct[] = await request('/products')
-
     setProducts(data.map(toProduct))
     setLoadError('')
   }, [])
@@ -87,13 +74,11 @@ function ProductsPage() {
     request('/products')
       .then((data: ApiProduct[]) => {
         if (cancelled) return
-
         setProducts(data.map(toProduct))
         setLoadError('')
       })
       .catch((error) => {
         if (cancelled) return
-
         setLoadError(
           error instanceof Error ? error.message : 'Could not load products.',
         )
@@ -117,7 +102,6 @@ function ProductsPage() {
     return matchesSearch && matchesCategory
   })
 
-  // Low-stock alerts are counted from ALL products, not the filtered list
   const lowStockCount = products.filter(isLowStock).length
 
   const emptyMessage = loadError
@@ -139,6 +123,7 @@ function ProductsPage() {
     }
 
     if (editingProduct) {
+      // 1. Update the basic product details first
       await request(`/products/${editingProduct.id}`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -149,11 +134,23 @@ function ProductsPage() {
         }),
       })
 
+      // 2. Check if stock was changed
       if (data.currentStock !== editingProduct.currentStock) {
-        await request(`/inventory/${editingProduct.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ quantity: data.currentStock }),
-        })
+        const difference = data.currentStock - editingProduct.currentStock;
+        
+        if (difference > 0) {
+          // If adding stock, use the RESTOCK API (this prevents the backend error)
+          await request(`/inventory/${editingProduct.id}/restock`, {
+            method: 'POST',
+            body: JSON.stringify({ quantity: difference }),
+          });
+        } else {
+          // If reducing stock, use the PUT API
+          await request(`/inventory/${editingProduct.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ quantity: data.currentStock }),
+          });
+        }
       }
     } else {
       await request('/products', {
@@ -174,52 +171,8 @@ function ProductsPage() {
 
   async function handleConfirmDelete(productId: number) {
     await request(`/products/${productId}`, { method: 'DELETE' })
-
     await loadProducts()
     setDeletingProduct(null)
-  }
-
-  function handleAdd(data: ProductFormData) {
-    setProducts((prev) => [
-      ...prev,
-      {
-        id: Math.max(0, ...prev.map((p) => p.id)) + 1,
-        name: data.name,
-        categoryName: data.category,
-        price: data.price,
-        currentStock: data.currentStock,
-        minStockLevel: data.minimumStock,
-        unit: data.unit,
-      } as Product,
-    ]);
-    setShowAdd(false);
-  }
-
-  // NEW: Edit save
-  function handleEditSave(data: ProductFormData) {
-    if (!editingProduct) return;
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === editingProduct.id
-          ? ({
-              ...p,
-              name: data.name,
-              categoryName: data.category,
-              price: data.price,
-              currentStock: data.currentStock,
-              minStockLevel: data.minimumStock,
-              unit: data.unit,
-            } as Product)
-          : p
-      )
-    );
-    setEditingProduct(null);
-  }
-
-  function handleConfirmDelete() {
-    if (!deletingProduct) return;
-    setProducts((prev) => prev.filter((p) => p.id !== deletingProduct.id));
-    setDeletingProduct(null);
   }
 
   return (
@@ -246,7 +199,6 @@ function ProductsPage() {
               className="h-[38px] w-[150px] shrink-0 cursor-pointer rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               <option value="All">All</option>
-
               {categories.map((category) => (
                 <option key={category} value={category}>
                   {category}

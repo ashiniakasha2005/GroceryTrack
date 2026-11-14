@@ -7,8 +7,6 @@ import { Link } from 'react-router-dom'
 
 const API_URL = 'http://localhost:3000/api'
 
-// Shape returned by GET /api/inventory/low-stock/list
-// (other field names are also accepted in case the API changes)
 type ApiLowStockProduct = {
   id?: number | string
   product_id?: number | string
@@ -43,10 +41,10 @@ export default function LowStockAlerts() {
   const [error, setError] = useState('')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
+  // Function for the "Refresh" button
   async function loadAlerts() {
     setLoading(true)
     setError('')
-
     try {
       const token = localStorage.getItem('token')
       const res = await fetch(`${API_URL}/inventory/low-stock/list`, {
@@ -65,7 +63,6 @@ export default function LowStockAlerts() {
         ? data
         : data.products ?? data.data ?? []
 
-      // Lowest stock first, so the most urgent items are at the top
       const sorted = list.map(toAlert).sort((a, b) => a.stock - b.stock)
 
       setAlerts(sorted)
@@ -82,8 +79,51 @@ export default function LowStockAlerts() {
     }
   }
 
+  // FIXED: Avoid calling setState synchronously in useEffect by using an IIFE and isMounted flag
   useEffect(() => {
-    loadAlerts()
+    let isMounted = true;
+
+    const fetchInitialAlerts = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(`${API_URL}/inventory/low-stock/list`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Your session has expired. Please log in again.')
+        }
+        if (!res.ok) {
+          throw new Error(`Server responded with ${res.status}`)
+        }
+
+        const data = await res.json()
+        const list: ApiLowStockProduct[] = Array.isArray(data)
+          ? data
+          : data.products ?? data.data ?? []
+
+        const sorted = list.map(toAlert).sort((a, b) => a.stock - b.stock)
+
+        if (isMounted) {
+          setAlerts(sorted)
+          setLastUpdated(new Date())
+          setLoading(false)
+        }
+      } catch (err) {
+        if (isMounted) {
+          setAlerts([])
+          setError(
+            err instanceof Error && err.message !== 'Failed to fetch'
+              ? err.message
+              : 'Cannot reach the server (http://localhost:3000). Is the backend running?',
+          )
+          setLoading(false)
+        }
+      }
+    }
+
+    void fetchInitialAlerts();
+    return () => { isMounted = false };
   }, [])
 
   const outOfStockCount = alerts.filter((a) => a.stock <= 0).length

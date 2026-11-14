@@ -1,11 +1,10 @@
 import { Request, Response } from "express";
 import db from "../config/db";
+import { isNonNegativeInteger } from "../utils/validators"; 
 
 // GET /api/products
 export const getProducts = async (req: Request, res: Response) => {
-
     try {
-
         const [products] = await db.execute<any>(`
             SELECT
                 p.product_id AS id,
@@ -20,11 +19,8 @@ export const getProducts = async (req: Request, res: Response) => {
                 ON p.category_id = c.category_id
             ORDER BY p.product_id DESC
         `);
-
         res.json(products);
-
     } catch (error) {
-
         res.status(500).json({
             message: "Failed to get products",
             error: error.message
@@ -34,11 +30,8 @@ export const getProducts = async (req: Request, res: Response) => {
 
 // GET /api/products/search/:name
 export const searchProducts = async (req: Request, res: Response) => {
-
     try {
-
         const search = `%${req.params.name}%`;
-
         const [products] = await db.execute<any>(`
             SELECT
                 p.product_id AS id,
@@ -52,11 +45,8 @@ export const searchProducts = async (req: Request, res: Response) => {
                 ON p.category_id = c.category_id
             WHERE p.product_name LIKE ?
         `, [search]);
-
         res.json(products);
-
     } catch (error) {
-
         res.status(500).json({
             message: "Search failed",
             error: error.message
@@ -66,9 +56,7 @@ export const searchProducts = async (req: Request, res: Response) => {
 
 // GET /api/products/:id
 export const getProductById = async (req: Request, res: Response) => {
-
     try {
-
         const [products] = await db.execute<any>(`
             SELECT
                 p.product_id AS id,
@@ -89,11 +77,8 @@ export const getProductById = async (req: Request, res: Response) => {
                 message: "Product not found"
             });
         }
-
         res.json(products[0]);
-
     } catch (error) {
-
         res.status(500).json({
             message: "Failed to get product",
             error: error.message
@@ -103,9 +88,7 @@ export const getProductById = async (req: Request, res: Response) => {
 
 // POST /api/products
 export const createProduct = async (req: Request, res: Response) => {
-
     try {
-
         const {
             name,
             category_id,
@@ -114,11 +97,7 @@ export const createProduct = async (req: Request, res: Response) => {
             minimum_stock
         } = req.body;
 
-        if (
-            !name ||
-            category_id === undefined ||
-            price === undefined
-        ) {
+        if (!name || category_id === undefined || price === undefined) {
             return res.status(400).json({
                 message: "Name, category_id and price are required"
             });
@@ -149,9 +128,7 @@ export const createProduct = async (req: Request, res: Response) => {
             message: "Product created successfully",
             productId: result.insertId
         });
-
     } catch (error) {
-
         res.status(500).json({
             message: "Failed to create product",
             error: error.message
@@ -162,22 +139,11 @@ export const createProduct = async (req: Request, res: Response) => {
 // PUT /api/products/:id
 export const updateProduct = async (req: Request, res: Response) => {
     try {
-        const {
-            name,
-            category_id,
-            price,
-            minimum_stock
-        } = req.body;
+        const { name, category_id, price, minimum_stock } = req.body;
 
-        if (
-            !name ||
-            category_id === undefined ||
-            price === undefined ||
-            minimum_stock === undefined
-        ) {
+        if (!name || category_id === undefined || price === undefined || minimum_stock === undefined) {
             return res.status(400).json({
-                message:
-                    "Name, category_id, price and minimum_stock are required"
+                message: "Name, category_id, price and minimum_stock are required"
             });
         }
 
@@ -189,30 +155,15 @@ export const updateProduct = async (req: Request, res: Response) => {
 
         const [result] = await db.execute<any>(`
             UPDATE products
-            SET
-                product_name = ?,
-                category_id = ?,
-                price = ?,
-                minimum_stock = ?
+            SET product_name = ?, category_id = ?, price = ?, minimum_stock = ?
             WHERE product_id = ?
-        `, [
-            name,
-            category_id,
-            price,
-            minimum_stock,
-            req.params.id
-        ]);
+        `, [name, category_id, price, minimum_stock, req.params.id]);
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({
-                message: "Product not found"
-            });
+            return res.status(404).json({ message: "Product not found" });
         }
 
-        return res.json({
-            message: "Product updated successfully"
-        });
-
+        return res.json({ message: "Product updated successfully" });
     } catch (error: any) {
         return res.status(500).json({
             message: "Failed to update product",
@@ -222,46 +173,30 @@ export const updateProduct = async (req: Request, res: Response) => {
 };
 
 // PATCH /api/products/:id/minimum-stock
-export const updateMinimumStock = async (
-    req: Request,
-    res: Response
-) => {
+export const updateMinimumStock = async (req: Request, res: Response) => {
     try {
         const productId = Number(req.params.id);
         const minimumStock = req.body?.minimum_stock;
 
         if (!Number.isInteger(productId) || productId <= 0) {
-            return res.status(400).json({
-                message: "Invalid product ID"
-            });
+            return res.status(400).json({ message: "Invalid product ID" });
         }
 
-        if (
-            !Number.isInteger(minimumStock) ||
-            minimumStock < 0
-        ) {
-            return res.status(400).json({
-                message: "minimum_stock must be a non-negative integer"
-            });
+        if (!Number.isInteger(minimumStock) || minimumStock < 0) {
+            return res.status(400).json({ message: "minimum_stock must be a non-negative integer" });
         }
 
         const [products] = await db.execute<any>(
-            `SELECT product_id
-             FROM products
-             WHERE product_id = ?`,
+            `SELECT product_id FROM products WHERE product_id = ?`,
             [productId]
         );
 
         if (products.length === 0) {
-            return res.status(404).json({
-                message: "Product not found"
-            });
+            return res.status(404).json({ message: "Product not found" });
         }
 
         await db.execute(
-            `UPDATE products
-             SET minimum_stock = ?
-             WHERE product_id = ?`,
+            `UPDATE products SET minimum_stock = ? WHERE product_id = ?`,
             [minimumStock, productId]
         );
 
@@ -270,13 +205,9 @@ export const updateMinimumStock = async (
             product_id: productId,
             minimum_stock: minimumStock
         });
-
     } catch (error: unknown) {
         console.error("Update minimum stock error:", error);
-
-        return res.status(500).json({
-            message: "Failed to update minimum stock"
-        });
+        return res.status(500).json({ message: "Failed to update minimum stock" });
     }
 };
 
@@ -289,16 +220,18 @@ export const deleteProduct = async (req: Request, res: Response) => {
         );
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({
-                message: "Product not found"
+            return res.status(404).json({ message: "Product not found" });
+        }
+
+        return res.json({ message: "Product deleted successfully" });
+    } catch (error: any) {
+        // Foreign key constraint error එක අල්ලගන්නවා (MySQL Error 1451)
+        if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.errno === 1451) {
+            return res.status(409).json({
+                message: "Cannot delete this product because it has existing sales records or stock history."
             });
         }
 
-        return res.json({
-            message: "Product deleted successfully"
-        });
-
-    } catch (error: any) {
         return res.status(500).json({
             message: "Failed to delete product",
             error: error.message
@@ -307,25 +240,17 @@ export const deleteProduct = async (req: Request, res: Response) => {
 };
 
 // GET /api/products/count
-export const getTotalProductCount = async (
-    req: Request,
-    res: Response
-) => {
+export const getTotalProductCount = async (req: Request, res: Response) => {
     try {
         const [result] = await db.execute<any>(`
-            SELECT COUNT(*) AS total_products
-            FROM products
+            SELECT COUNT(*) AS total_products FROM products
         `);
 
         return res.status(200).json({
             total_products: result[0].total_products
         });
-
     } catch (error) {
         console.error("Get total product count error:", error);
-
-        return res.status(500).json({
-            message: "Failed to get total product count"
-        });
+        return res.status(500).json({ message: "Failed to get total product count" });
     }
 };

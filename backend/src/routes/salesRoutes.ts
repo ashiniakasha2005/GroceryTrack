@@ -1,4 +1,3 @@
-
 import express from "express";
 import db from "../config/db";
 
@@ -120,13 +119,13 @@ router.post("/", authenticateToken, async (req, res) => {
             const product = products[0];
             const availableStock = Number(product.current_stock);
 
-            if (product.current_stock < quantity) {
+            if (availableStock < quantity) {
                 await connection.rollback();
                 transactionStarted = false;
 
                 return res.status(400).json({
                     message: `Insufficient stock for ${product.product_name}`,
-                    available_stock: product.current_stock,
+                    available_stock: availableStock,
                     requested_quantity: quantity
                 });
             }
@@ -143,8 +142,8 @@ router.post("/", authenticateToken, async (req, res) => {
 
             totalAmountCents += subtotalCents;
 
-            // BE-14 and BE-15: Calculate updated stock
-            const updatedStock = product.current_stock - quantity;
+            // Calculate updated stock
+            const updatedStock = availableStock - quantity;
             const minimumStock = Number(product.minimum_stock);
 
             saleItems.push({
@@ -225,10 +224,8 @@ router.post("/", authenticateToken, async (req, res) => {
             user_id: req.user.id,
             total_amount: totalAmount.toFixed(2),
 
-            // BE-15: Return updated stock information
             items: saleItems,
 
-            // BE-14: Return products that reached low stock
             low_stock_products: saleItems
                 .filter(item => item.low_stock)
                 .map(item => ({
@@ -264,6 +261,7 @@ router.post("/", authenticateToken, async (req, res) => {
 router.get("/", authenticateToken, async (req, res) => {
     try {
 
+        // Added a subquery to get the total items sold for this sale
         const [sales] = await db.execute<RowDataPacket[]>(`
             SELECT
                 s.sale_id,
@@ -271,7 +269,8 @@ router.get("/", authenticateToken, async (req, res) => {
                 s.sale_date_time,
                 s.total_amount,
                 s.status,
-                u.name AS sold_by
+                u.name AS sold_by,
+                (SELECT COALESCE(SUM(quantity), 0) FROM sale_items WHERE sale_id = s.sale_id) AS total_items
              FROM sales s
              LEFT JOIN users u
                 ON s.user_id = u.id
@@ -299,11 +298,11 @@ router.get("/:id", authenticateToken, async (req, res) => {
     try {
         const saleId = Number(req.params.id);
 
-if (!Number.isSafeInteger(saleId) || saleId <= 0) {
-    return res.status(400).json({
-        message: "Invalid sale ID"
-    });
-}
+        if (!Number.isSafeInteger(saleId) || saleId <= 0) {
+            return res.status(400).json({
+                message: "Invalid sale ID"
+            });
+        }
 
         const [sales] = await db.execute<RowDataPacket[]>(`
             SELECT
@@ -357,7 +356,6 @@ if (!Number.isSafeInteger(saleId) || saleId <= 0) {
 // =========================
 // CANCEL SALE (ADMIN ONLY)
 // =========================
-
 
 router.put("/:id/cancel", authenticateToken, adminOnly, async (req, res) => {
 
