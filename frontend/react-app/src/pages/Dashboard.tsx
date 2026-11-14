@@ -230,13 +230,5 @@ export default function Dashboard() {
               ))
             )}
           </div>
-          
-          <div className="mt-4 text-right">
-             <Link to="/low-stock" className="text-xs font-medium text-[#0d6efd] hover:underline">View All Alerts</Link>
-          </div>
-        </div>
-
-      </div>
-    </div>
   );
 }
