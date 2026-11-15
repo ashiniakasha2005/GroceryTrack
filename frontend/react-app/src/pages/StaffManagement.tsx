@@ -64,6 +64,7 @@ type ApiStaff = {
   username: string
   email: string
   role?: string | null
+  is_active: number | boolean
   created_at: string
 }
 
@@ -96,28 +97,7 @@ async function request(path: string, options: RequestInit = {}) {
   return data
 }
 
-// The database has no active/inactive column yet,
-// so the status is remembered in this browser only.
-const STATUS_STORAGE_KEY = 'grocerytrack_staff_status'
 
-function loadStatuses(): Record<string, Staff['status']> {
-  try {
-    const saved = localStorage.getItem(STATUS_STORAGE_KEY)
-    return saved ? JSON.parse(saved) : {}
-  } catch {
-    return {}
-  }
-}
-
-function saveStatus(id: number, status: Staff['status']) {
-  try {
-    const statuses = loadStatuses()
-    statuses[String(id)] = status
-    localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(statuses))
-  } catch (error) {
-    console.error('Could not save staff status:', error)
-  }
-}
 
 function toStaff(item: ApiStaff): Staff {
   return {
@@ -126,7 +106,7 @@ function toStaff(item: ApiStaff): Staff {
     username: `@${item.username}`,
     email: item.email,
     role: String(item.role ?? '').toLowerCase() === 'admin' ? 'Admin' : 'Staff',
-    status: loadStatuses()[String(item.id)] ?? 'Active',
+    status: item.is_active === 1 || item.is_active === true ? 'Active' : 'Inactive',
     dateJoined: formatDateJoined(new Date(item.created_at)),
     initials: getInitials(item.name),
   }
@@ -300,54 +280,43 @@ function StaffManagement() {
     setActionType(null)
   }
 
-  const confirmAction = async () => {
+     const confirmAction = async () => {
     if (!selectedStaff || !actionType) {
       return
     }
 
     const staffName = selectedStaff.name
 
-    if (actionType === 'delete') {
-      try {
+    try {
+      // If deleting or deactivating, we call the DELETE endpoint (which now soft-deletes)
+      if (actionType === 'delete' || actionType === 'deactivate') {
         await request(`/staff/${selectedStaff.id}`, {
           method: 'DELETE',
         })
-
-        await loadStaff()
-        closeConfirmation()
-        showToast(`${staffName}'s account was deleted.`)
-      } catch (error) {
-        closeConfirmation()
-        showToast(
-          error instanceof Error
-            ? error.message
-            : 'Could not delete the account.',
-        )
+      } 
+      // If activating, we call the new PATCH endpoint
+      else if (actionType === 'activate') {
+        await request(`/staff/${selectedStaff.id}/activate`, {
+          method: 'PATCH',
+        })
       }
 
-      return
+      // Reload the list from the database to get the fresh status
+      await loadStaff()
+      closeConfirmation()
+      
+      const actionText = actionType === 'delete' ? 'deleted' : actionType === 'deactivate' ? 'deactivated' : 'activated'
+      showToast(`${staffName}'s account was ${actionText}.`)
+      
+    } catch (error) {
+      closeConfirmation()
+      showToast(
+        error instanceof Error
+          ? error.message
+          : 'Could not update the account.',
+      )
     }
-
-    const nextStatus: Staff['status'] =
-      actionType === 'deactivate' ? 'Inactive' : 'Active'
-
-    saveStatus(selectedStaff.id, nextStatus)
-
-    setStaff((currentStaff) =>
-      currentStaff.map((member) =>
-        member.id === selectedStaff.id
-          ? { ...member, status: nextStatus }
-          : member,
-      ),
-    )
-
-    closeConfirmation()
-    showToast(
-      `${staffName}'s account was ${
-        actionType === 'deactivate' ? 'deactivated' : 'activated'
-      }.`,
-    )
-  }
+  }  
 
   /* ---------------------------
      Add / Edit form actions

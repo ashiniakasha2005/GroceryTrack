@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import db from "../config/db";
-import { isNonNegativeInteger } from "../utils/validators"; 
+import { isNonNegativeInteger } from "../utils/validators";
 
 // GET /api/products
 export const getProducts = async (req: Request, res: Response) => {
@@ -246,7 +246,7 @@ export const deleteProduct = async (req: Request, res: Response) => {
 export const getTotalProductCount = async (req: Request, res: Response) => {
     try {
         const [result] = await db.execute<any>(`
-            SELECT COUNT(*) AS total_products FROM products
+            SELECT COUNT(*) AS total_products FROM products WHERE is_active = 1
         `);
 
         return res.status(200).json({
