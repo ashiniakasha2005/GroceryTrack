@@ -9,7 +9,7 @@ type ApiProduct = {
   category?: string | { name: string } | null
   category_name?: string
   price: number | string
-  stock_qty?: number | string
+  stock_quantity?: number | string
   min_stock_level?: number | string
   unit?: string
 }
@@ -46,7 +46,7 @@ function toRow(p: ApiProduct): StockRow {
     name: p.name,
     category,
     price: Number(p.price) || 0,
-    stock: Number(p.stock_qty) || 0,
+    stock: Number(p.stock_quantity) || 0, 
     minStock: Number(p.min_stock_level) || 0,
     unit: p.unit ?? '',
   }

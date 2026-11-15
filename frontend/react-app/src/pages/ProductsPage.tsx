@@ -121,7 +121,7 @@ function ProductsPage() {
     const category = categoryItems.find((item) => item.name === data.category)
 
     if (!category) {
-      throw new Error('Category not found')
+      throw new Error('Category not found. Please try refreshing the page.')
     }
 
     if (editingProduct) {

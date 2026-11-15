@@ -182,8 +182,16 @@ function AppShell() {
             Main Menu
           </div>
 
-          <nav className="space-y-2">
-                {navItems.map((item) => (
+                    <nav className="space-y-2">
+            {navItems
+              .filter((item) => {
+                // Hide Staff Management from non-admins
+                if (item.to === '/staff') {
+                  return currentUser?.role?.toLowerCase() === 'admin'
+                }
+                return true
+              })
+              .map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

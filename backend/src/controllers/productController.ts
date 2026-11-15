@@ -100,9 +100,9 @@ export const createProduct = async (req: Request, res: Response) => {
             minimum_stock
         } = req.body;
 
-        if (!name || category_id === undefined || price === undefined) {
+        if (!name || category_id === undefined || category_id === null || price === undefined) {
             return res.status(400).json({
-                message: "Name, category_id and price are required"
+                message: "Name, category and price are required"
             });
         }
 

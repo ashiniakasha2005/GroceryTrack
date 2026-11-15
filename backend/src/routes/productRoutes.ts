@@ -17,9 +17,9 @@ router.get("/", authenticateToken, getProducts);
 router.get("/search/:name", authenticateToken, searchProducts);
 router.get("/count", authenticateToken, getTotalProductCount);
 router.get("/:id", authenticateToken, getProductById);
-router.post("/", authenticateToken, adminOnly, createProduct);
-router.put("/:id", authenticateToken, adminOnly, updateProduct);
-router.delete("/:id", authenticateToken, adminOnly, deleteProduct);
+router.post("/", authenticateToken, createProduct);
+router.put("/:id", authenticateToken, updateProduct);
+router.delete("/:id", authenticateToken, deleteProduct);
 
 router.patch(
     "/:id/minimum-stock",

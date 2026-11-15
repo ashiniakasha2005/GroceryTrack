@@ -8,6 +8,7 @@ export interface User extends RowDataPacket {
     username: string;
     password_hash: string;
     role: "admin" | "staff";
+    is_active: number | boolean;
 }
 
 export async function findUserByIdentifier(identifier: string): Promise<User | null> {
