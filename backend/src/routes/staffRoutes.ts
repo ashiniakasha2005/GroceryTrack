@@ -24,6 +24,7 @@ router.get("/", authenticateToken, adminOnly, async (req, res) => {
                 username,
                 email,
                 role,
+                is_active,
                 created_at
              FROM users
              WHERE role = 'staff'
@@ -549,7 +550,7 @@ router.delete("/:id", authenticateToken, adminOnly, async (req, res) => {
         // ---------------------------------------------
 
         await db.execute<any>(
-            `DELETE FROM users
+            `UPDATE users SET is_active = 0
              WHERE id = ?
              AND role = 'staff'`,
             [id]
@@ -571,6 +572,32 @@ router.delete("/:id", authenticateToken, adminOnly, async (req, res) => {
         });
     }
 });
+// =====================================================
+// ACTIVATE STAFF
+// PATCH /api/staff/:id/activate
+// =====================================================
 
+router.patch("/:id/activate", authenticateToken, adminOnly, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const [result] = await db.execute<any>(
+            `UPDATE users SET is_active = 1
+             WHERE id = ?
+             AND role = 'staff'`,
+            [id]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: "Staff not found" });
+        }
+
+        res.status(200).json({ message: "Staff account activated successfully" });
+
+    } catch (error) {
+        console.error("Activate staff error:", error);
+        res.status(500).json({ message: "Failed to activate staff" });
+    }
+});
 
 export default router;

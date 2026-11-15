@@ -20,9 +20,16 @@ export async function login(req: Request, res: Response) {
             return res.status(401).json({ message: "Invalid credentials" });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password_hash);
+                const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
             return res.status(401).json({ message: "Invalid credentials" });
+        }
+
+        // NEW: Check if the account has been deactivated (soft-deleted)
+        if (user.is_active === 0 || user.is_active === false) {
+            return res.status(403).json({ 
+                message: "Your account has been deactivated. Please contact an administrator." 
+            });
         }
 
         const jwtSecret = process.env.JWT_SECRET;
