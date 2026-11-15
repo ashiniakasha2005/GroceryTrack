@@ -36,6 +36,7 @@ export const pool = mysql.createPool({
         ca: fs.readFileSync(sslCaPath),
         rejectUnauthorized: true
     },
+     timezone: 'Z',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
