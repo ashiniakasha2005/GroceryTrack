@@ -266,7 +266,7 @@ router.get("/", authenticateToken, async (req, res) => {
             SELECT
                 s.sale_id,
                 s.user_id,
-                DATE_FORMAT(s.sale_date_time, '%Y-%m-%dT%H:%i:%s') AS sale_date_time,
+                s.sale_date_time,
                 s.total_amount,
                 s.sale_date_time,
                 s.total_amount,
