@@ -9,7 +9,6 @@ import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import CategoryManagement from './pages/CategoryManagement'
 import InventoryList from './components/InventoryList'
-import LowStockAlerts from './pages/LowStockAlerts'
 
 
 function ProtectedRoute() {
@@ -31,7 +30,6 @@ function App() {
         <Route path="/sales" element={<SalesPage />} />
         <Route path="/staff" element={<StaffManagement />} />
         <Route path="/products" element={<ProductManagement />} />
-        <Route path="/low-stock" element={<LowStockAlerts />} />
                 <Route
           path="/categories"
           element={
