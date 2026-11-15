@@ -51,7 +51,7 @@ function Login() {
       localStorage.setItem("user", JSON.stringify(data.user));
 
       if (data.user.role === "admin" || data.user.role === "staff") {
-        navigate("/dashboard");
+        navigate("/dashboard", { replace: true });
       }
 
     } catch (error) {

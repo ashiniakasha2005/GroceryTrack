@@ -8,6 +8,7 @@ import type { Product } from '../types/product'
 import SearchBar from '../components/SearchBar'
 import { useCategories } from '../context/CategoryContext'
 import { isLowStock } from '../utils/stock'
+import { useNavigate } from 'react-router-dom'
 
 const API_URL = 'http://localhost:3000/api'
 
@@ -48,12 +49,12 @@ function toProduct(item: ApiProduct): Product {
     price: Number(item.price),
     currentStock: Number(item.stock_quantity),
     minStockLevel: Number(item.minimum_stock),
-    // The database does not store a unit yet
-    unit: 'pcs',
+    unit: 'pcs', // The database does not store a unit yet
   }
 }
 
 function ProductsPage() {
+  const navigate = useNavigate()
   const { categories, categoryItems, refreshCategories } = useCategories()
   const [products, setProducts] = useState<Product[]>([])
   const [loadError, setLoadError] = useState('')
@@ -65,7 +66,6 @@ function ProductsPage() {
 
   const loadProducts = useCallback(async () => {
     const data: ApiProduct[] = await request('/products')
-
     setProducts(data.map(toProduct))
     setLoadError('')
   }, [])
@@ -76,13 +76,11 @@ function ProductsPage() {
     request('/products')
       .then((data: ApiProduct[]) => {
         if (cancelled) return
-
         setProducts(data.map(toProduct))
         setLoadError('')
       })
       .catch((error) => {
         if (cancelled) return
-
         setLoadError(
           error instanceof Error ? error.message : 'Could not load products.',
         )
@@ -106,7 +104,6 @@ function ProductsPage() {
     return matchesSearch && matchesCategory
   })
 
-  // Low-stock alerts are counted from ALL products, not the filtered list
   const lowStockCount = products.filter(isLowStock).length
 
   const emptyMessage = loadError
@@ -124,10 +121,11 @@ function ProductsPage() {
     const category = categoryItems.find((item) => item.name === data.category)
 
     if (!category) {
-      throw new Error('Category not found')
+      throw new Error('Category not found. Please try refreshing the page.')
     }
 
     if (editingProduct) {
+      // 1. Update the basic product details first
       await request(`/products/${editingProduct.id}`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -138,11 +136,23 @@ function ProductsPage() {
         }),
       })
 
+      // 2. Check if stock was changed
       if (data.currentStock !== editingProduct.currentStock) {
-        await request(`/inventory/${editingProduct.id}`, {
-          method: 'PUT',
-          body: JSON.stringify({ quantity: data.currentStock }),
-        })
+        const difference = data.currentStock - editingProduct.currentStock;
+        
+        if (difference > 0) {
+          // If adding stock, use the RESTOCK API (this prevents the backend error)
+          await request(`/inventory/${editingProduct.id}/restock`, {
+            method: 'POST',
+            body: JSON.stringify({ quantity: difference }),
+          });
+        } else {
+          // If reducing stock, use the PUT API
+          await request(`/inventory/${editingProduct.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ quantity: data.currentStock }),
+          });
+        }
       }
     } else {
       await request('/products', {
@@ -163,7 +173,6 @@ function ProductsPage() {
 
   async function handleConfirmDelete(productId: number) {
     await request(`/products/${productId}`, { method: 'DELETE' })
-
     await loadProducts()
     setDeletingProduct(null)
   }
@@ -192,7 +201,6 @@ function ProductsPage() {
               className="h-[38px] w-[150px] shrink-0 cursor-pointer rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             >
               <option value="All">All</option>
-
               {categories.map((category) => (
                 <option key={category} value={category}>
                   {category}
@@ -201,6 +209,7 @@ function ProductsPage() {
             </select>
           </div>
         }
+        onAddCategory={() => navigate('/categories')}
         onAdd={() => {
           setEditingProduct(null)
           setShowForm(true)

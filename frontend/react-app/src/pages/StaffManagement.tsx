@@ -64,6 +64,7 @@ type ApiStaff = {
   username: string
   email: string
   role?: string | null
+  is_active: number | boolean
   created_at: string
 }
 
@@ -96,29 +97,6 @@ async function request(path: string, options: RequestInit = {}) {
   return data
 }
 
-// The database has no active/inactive column yet,
-// so the status is remembered in this browser only.
-const STATUS_STORAGE_KEY = 'grocerytrack_staff_status'
-
-function loadStatuses(): Record<string, Staff['status']> {
-  try {
-    const saved = localStorage.getItem(STATUS_STORAGE_KEY)
-    return saved ? JSON.parse(saved) : {}
-  } catch {
-    return {}
-  }
-}
-
-function saveStatus(id: number, status: Staff['status']) {
-  try {
-    const statuses = loadStatuses()
-    statuses[String(id)] = status
-    localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(statuses))
-  } catch (error) {
-    console.error('Could not save staff status:', error)
-  }
-}
-
 function toStaff(item: ApiStaff): Staff {
   return {
     id: item.id,
@@ -126,7 +104,7 @@ function toStaff(item: ApiStaff): Staff {
     username: `@${item.username}`,
     email: item.email,
     role: String(item.role ?? '').toLowerCase() === 'admin' ? 'Admin' : 'Staff',
-    status: loadStatuses()[String(item.id)] ?? 'Active',
+    status: item.is_active === 1 || item.is_active === true ? 'Active' : 'Inactive',
     dateJoined: formatDateJoined(new Date(item.created_at)),
     initials: getInitials(item.name),
   }
@@ -175,8 +153,6 @@ const DeleteIcon = () => (
   </svg>
 )
 
-// Closed padlock = account is active (click to deactivate)
-// Open padlock   = account is inactive (click to activate)
 const LockIcon = ({ locked }: { locked: boolean }) => (
   <svg width="15" height="15" viewBox="0 0 24 24" {...iconProps}>
     <rect x="5" y="10" width="14" height="10" rx="2" />
@@ -204,7 +180,7 @@ const ToastIcon = () => (
 
 function StaffManagement() {
   const [staff, setStaff] = useState<Staff[]>([])
-
+  const [showInactive, setShowInactive] = useState(false) 
   const [search, setSearch] = useState('')
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null)
   const [actionType, setActionType] = useState<ActionType>(null)
@@ -215,8 +191,6 @@ function StaffManagement() {
 
   const loadStaff = async () => {
     const data: ApiStaff[] = await request('/staff')
-
-    // Oldest first, so new accounts appear at the bottom of the list
     setStaff([...data].sort((a, b) => a.id - b.id).map(toStaff))
   }
 
@@ -226,17 +200,13 @@ function StaffManagement() {
     request('/staff')
       .then((data: ApiStaff[]) => {
         if (cancelled) return
-
         setStaff([...data].sort((a, b) => a.id - b.id).map(toStaff))
       })
       .catch((error) => {
         if (cancelled) return
-
         console.error('Could not load staff accounts:', error)
         setToast(
-          error instanceof Error
-            ? error.message
-            : 'Could not load staff accounts.',
+          error instanceof Error ? error.message : 'Could not load staff accounts.'
         )
       })
 
@@ -245,29 +215,31 @@ function StaffManagement() {
     }
   }, [])
 
-  const activeCount = staff.filter(
-    (member) => member.status === 'Active',
-  ).length
+  const activeCount = staff.filter((member) => member.status === 'Active').length
 
+  // FIXED: Properly filtering by showInactive AND search
   const filteredStaff = useMemo(() => {
     const searchValue = search.toLowerCase().trim()
 
-    if (!searchValue) {
-      return staff
-    }
+    return staff.filter((member) => {
+      // 1. Check if we should hide inactive accounts
+      if (!showInactive && member.status === 'Inactive') {
+        return false
+      }
 
-    return staff.filter(
-      (member) =>
+      // 2. Check search query
+      if (!searchValue) {
+        return true
+      }
+
+      return (
         member.name.toLowerCase().includes(searchValue) ||
         member.username.toLowerCase().includes(searchValue) ||
-        member.email.toLowerCase().includes(searchValue),
-    )
-  }, [search, staff])
+        member.email.toLowerCase().includes(searchValue)
+      )
+    })
+  }, [search, staff, showInactive])
 
-  /*
-   * These lists are passed to StaffForm so it can detect
-   * duplicate usernames and emails while adding/editing.
-   */
   const existingUsernames = useMemo(
     () => staff.map((member) => stripAt(member.username)),
     [staff],
@@ -280,15 +252,10 @@ function StaffManagement() {
 
   const showToast = (message: string) => {
     setToast(message)
-
     window.setTimeout(() => {
       setToast(null)
     }, 3000)
   }
-
-  /* ---------------------------
-     Confirmation actions
-  ---------------------------- */
 
   const openConfirmation = (member: Staff, action: ActionType) => {
     setSelectedStaff(member)
@@ -301,57 +268,30 @@ function StaffManagement() {
   }
 
   const confirmAction = async () => {
-    if (!selectedStaff || !actionType) {
-      return
-    }
+    if (!selectedStaff || !actionType) return
 
     const staffName = selectedStaff.name
 
-    if (actionType === 'delete') {
-      try {
-        await request(`/staff/${selectedStaff.id}`, {
-          method: 'DELETE',
-        })
-
-        await loadStaff()
-        closeConfirmation()
-        showToast(`${staffName}'s account was deleted.`)
-      } catch (error) {
-        closeConfirmation()
-        showToast(
-          error instanceof Error
-            ? error.message
-            : 'Could not delete the account.',
-        )
+    try {
+      if (actionType === 'delete' || actionType === 'deactivate') {
+        await request(`/staff/${selectedStaff.id}`, { method: 'DELETE' })
+      } else if (actionType === 'activate') {
+        await request(`/staff/${selectedStaff.id}/activate`, { method: 'PATCH' })
       }
 
-      return
+      await loadStaff()
+      closeConfirmation()
+      
+      const actionText = actionType === 'delete' ? 'deleted' : actionType === 'deactivate' ? 'deactivated' : 'activated'
+      showToast(`${staffName}'s account was ${actionText}.`)
+      
+    } catch (error) {
+      closeConfirmation()
+      showToast(
+        error instanceof Error ? error.message : 'Could not update the account.'
+      )
     }
-
-    const nextStatus: Staff['status'] =
-      actionType === 'deactivate' ? 'Inactive' : 'Active'
-
-    saveStatus(selectedStaff.id, nextStatus)
-
-    setStaff((currentStaff) =>
-      currentStaff.map((member) =>
-        member.id === selectedStaff.id
-          ? { ...member, status: nextStatus }
-          : member,
-      ),
-    )
-
-    closeConfirmation()
-    showToast(
-      `${staffName}'s account was ${
-        actionType === 'deactivate' ? 'deactivated' : 'activated'
-      }.`,
-    )
-  }
-
-  /* ---------------------------
-     Add / Edit form actions
-  ---------------------------- */
+  }  
 
   const openAddForm = () => {
     setFormState({ mode: 'add' })
@@ -362,17 +302,10 @@ function StaffManagement() {
   }
 
   const closeForm = () => {
-    if (isSubmittingForm) {
-      return
-    }
-
+    if (isSubmittingForm) return
     setFormState(null)
   }
 
-  /*
-   * StaffForm sends: fullName, username, email, role, id, password.
-   * We convert that into the body the backend API expects.
-   */
   const handleStaffFormSubmit = async (values: StaffFormValues) => {
     setIsSubmittingForm(true)
 
@@ -405,15 +338,13 @@ function StaffManagement() {
       showToast(
         formState?.mode === 'edit'
           ? 'Staff account updated successfully.'
-          : 'Staff account created successfully.',
+          : 'Staff account created successfully.'
       )
 
       setFormState(null)
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Something went wrong.'
+      const message = error instanceof Error ? error.message : 'Something went wrong.'
 
-      // Tell the form which field is the problem, if the API says so
       if (/username/i.test(message) && /already/i.test(message)) {
         throw { field: 'username', message }
       }
@@ -428,26 +359,14 @@ function StaffManagement() {
     }
   }
 
-  /* ---------------------------
-     Modal text
-  ---------------------------- */
-
   const getModalTitle = () => {
-    if (actionType === 'delete') {
-      return 'Delete Staff Account'
-    }
-
-    if (actionType === 'deactivate') {
-      return 'Deactivate Staff Account'
-    }
-
+    if (actionType === 'delete') return 'Delete Staff Account'
+    if (actionType === 'deactivate') return 'Deactivate Staff Account'
     return 'Activate Staff Account'
   }
 
   const getModalMessage = () => {
-    if (!selectedStaff) {
-      return ''
-    }
+    if (!selectedStaff) return ''
 
     if (actionType === 'delete') {
       return `Are you sure you want to delete ${selectedStaff.name}'s account? This action cannot be undone.`
@@ -462,12 +381,8 @@ function StaffManagement() {
 
   const getConfirmButtonStyle = (): CSSProperties => {
     if (actionType === 'activate') {
-      return {
-        ...primaryButtonStyle,
-        backgroundColor: '#198754',
-      }
+      return { ...primaryButtonStyle, backgroundColor: '#198754' }
     }
-
     return dangerButtonStyle
   }
 
@@ -479,8 +394,7 @@ function StaffManagement() {
           backgroundColor: '#f0f2f5',
           margin: '-24px',
           padding: '24px 28px',
-          fontFamily:
-            'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
           color: '#212529',
         }}
       >
@@ -514,7 +428,6 @@ function StaffManagement() {
             </div>
           </div>
 
-          {/* Add New Staff */}
           <button
             type="button"
             onClick={openAddForm}
@@ -549,7 +462,7 @@ function StaffManagement() {
             marginBottom: '14px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <div style={{ position: 'relative', flex: 1 }}>
               <span
                 style={{
@@ -585,6 +498,16 @@ function StaffManagement() {
                 }}
               />
             </div>
+
+            {/* NEW CHECKBOX FOR INACTIVE ACCOUNTS */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#6c757d', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <input 
+                type="checkbox" 
+                checked={showInactive} 
+                onChange={(e) => setShowInactive(e.target.checked)} 
+              />
+              Show Inactive Accounts
+            </label>
 
             <span
               style={{
@@ -634,32 +557,18 @@ function StaffManagement() {
 
               <tbody>
                 {filteredStaff.map((member) => {
-                  // Keep each person's avatar colour stable, even while searching
-                  const colorIndex = staff.findIndex(
-                    (item) => item.id === member.id,
-                  )
+                  const colorIndex = staff.findIndex((item) => item.id === member.id)
 
                   return (
-                    <tr
-                      key={member.id}
-                      style={{ borderBottom: '1px solid #f1f3f5' }}
-                    >
-                      {/* Full Name */}
+                    <tr key={member.id} style={{ borderBottom: '1px solid #f1f3f5' }}>
                       <td style={tableCellStyle}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px',
-                          }}
-                        >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <div
                             style={{
                               width: '30px',
                               height: '30px',
                               borderRadius: '50%',
-                              backgroundColor:
-                                avatarColors[colorIndex % avatarColors.length],
+                              backgroundColor: avatarColors[colorIndex % avatarColors.length],
                               color: '#fff',
                               display: 'flex',
                               alignItems: 'center',
@@ -671,37 +580,21 @@ function StaffManagement() {
                           >
                             {member.initials}
                           </div>
-
-                          <span
-                            style={{
-                              fontWeight: 500,
-                              color: '#343a40',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
+                          <span style={{ fontWeight: 500, color: '#343a40', whiteSpace: 'nowrap' }}>
                             {member.name}
                           </span>
                         </div>
                       </td>
 
-                      {/* Username / Email */}
                       <td style={tableCellStyle}>
-                        <div
-                          style={{
-                            color: '#495057',
-                            fontSize: '11px',
-                            marginBottom: '3px',
-                          }}
-                        >
+                        <div style={{ color: '#495057', fontSize: '11px', marginBottom: '3px' }}>
                           {member.username}
                         </div>
-
                         <div style={{ color: '#adb5bd', fontSize: '10px' }}>
                           {member.email}
                         </div>
                       </td>
 
-                      {/* Role */}
                       <td style={tableCellStyle}>
                         <span
                           style={{
@@ -709,10 +602,8 @@ function StaffManagement() {
                             alignItems: 'center',
                             padding: '4px 8px',
                             borderRadius: '4px',
-                            backgroundColor:
-                              member.role === 'Admin' ? '#cfe2ff' : '#e9ecef',
-                            color:
-                              member.role === 'Admin' ? '#084298' : '#495057',
+                            backgroundColor: member.role === 'Admin' ? '#cfe2ff' : '#e9ecef',
+                            color: member.role === 'Admin' ? '#084298' : '#495057',
                             fontSize: '10px',
                             fontWeight: 600,
                           }}
@@ -721,7 +612,6 @@ function StaffManagement() {
                         </span>
                       </td>
 
-                      {/* Status */}
                       <td style={tableCellStyle}>
                         <span
                           style={{
@@ -730,14 +620,8 @@ function StaffManagement() {
                             gap: '5px',
                             padding: '4px 8px',
                             borderRadius: '4px',
-                            backgroundColor:
-                              member.status === 'Active'
-                                ? '#d1e7dd'
-                                : '#e9ecef',
-                            color:
-                              member.status === 'Active'
-                                ? '#0a3622'
-                                : '#6c757d',
+                            backgroundColor: member.status === 'Active' ? '#d1e7dd' : '#e9ecef',
+                            color: member.status === 'Active' ? '#0a3622' : '#6c757d',
                             fontSize: '10px',
                             fontWeight: 500,
                           }}
@@ -747,33 +631,19 @@ function StaffManagement() {
                               width: '5px',
                               height: '5px',
                               borderRadius: '50%',
-                              backgroundColor:
-                                member.status === 'Active'
-                                  ? '#198754'
-                                  : '#adb5bd',
+                              backgroundColor: member.status === 'Active' ? '#198754' : '#adb5bd',
                             }}
                           />
-
                           {member.status}
                         </span>
                       </td>
 
-                      {/* Date Joined */}
-                      <td
-                        style={{
-                          ...tableCellStyle,
-                          color: '#adb5bd',
-                          fontSize: '10px',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
+                      <td style={{ ...tableCellStyle, color: '#adb5bd', fontSize: '10px', whiteSpace: 'nowrap' }}>
                         {member.dateJoined}
                       </td>
 
-                      {/* Actions: Edit / Lock / Delete */}
                       <td style={tableCellStyle}>
                         <div style={{ display: 'flex', gap: '5px' }}>
-                          {/* Edit (name, username, email, role, password) */}
                           <button
                             type="button"
                             title="Edit"
@@ -784,39 +654,24 @@ function StaffManagement() {
                             <EditIcon />
                           </button>
 
-                          {/* Deactivate / Activate */}
                           <button
                             type="button"
-                            title={
-                              member.status === 'Active'
-                                ? 'Deactivate'
-                                : 'Activate'
-                            }
-                            aria-label={
-                              member.status === 'Active'
-                                ? `Deactivate ${member.name}`
-                                : `Activate ${member.name}`
-                            }
+                            title={member.status === 'Active' ? 'Deactivate' : 'Activate'}
+                            aria-label={member.status === 'Active' ? `Deactivate ${member.name}` : `Activate ${member.name}`}
                             onClick={() =>
                               openConfirmation(
                                 member,
-                                member.status === 'Active'
-                                  ? 'deactivate'
-                                  : 'activate',
+                                member.status === 'Active' ? 'deactivate' : 'activate',
                               )
                             }
                             style={{
                               ...actionButtonStyle,
-                              color:
-                                member.status === 'Active'
-                                  ? '#6c757d'
-                                  : '#198754',
+                              color: member.status === 'Active' ? '#6c757d' : '#198754',
                             }}
                           >
                             <LockIcon locked={member.status === 'Active'} />
                           </button>
 
-                          {/* Delete */}
                           <button
                             type="button"
                             title="Delete"
@@ -851,7 +706,6 @@ function StaffManagement() {
             </table>
           </div>
 
-          {/* Table Footer */}
           <div
             style={{
               padding: '10px 14px',
@@ -865,7 +719,6 @@ function StaffManagement() {
         </div>
       </div>
 
-      {/* Add / Edit Staff Form */}
       {formState && (
         <StaffForm
           mode={formState.mode}
@@ -877,10 +730,7 @@ function StaffManagement() {
                   username: stripAt(formState.staff.username),
                   email: formState.staff.email,
                   role: formState.staff.role,
-                  status:
-                    formState.staff.status === 'Active'
-                      ? 'active'
-                      : 'inactive',
+                  status: formState.staff.status === 'Active' ? 'active' : 'inactive',
                 }
               : undefined
           }
@@ -893,62 +743,29 @@ function StaffManagement() {
         />
       )}
 
-      {/* Confirmation Modal (delete / deactivate / activate) */}
       {selectedStaff && actionType && (
         <div style={overlayStyle}>
           <div style={modalStyle}>
-            {/* Header */}
             <div style={modalHeaderStyle}>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: '#343a40',
-                }}
-              >
+              <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#343a40' }}>
                 {getModalTitle()}
               </h3>
-
-              <button
-                type="button"
-                onClick={closeConfirmation}
-                aria-label="Close"
-                style={closeButtonStyle}
-              >
+              <button type="button" onClick={closeConfirmation} aria-label="Close" style={closeButtonStyle}>
                 <CloseIcon />
               </button>
             </div>
 
-            {/* Body */}
             <div style={modalBodyStyle}>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: '12px',
-                  lineHeight: 1.7,
-                  color: '#6c757d',
-                }}
-              >
+              <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.7, color: '#6c757d' }}>
                 {getModalMessage()}
               </p>
             </div>
 
-            {/* Footer */}
             <div style={modalFooterStyle}>
-              <button
-                type="button"
-                onClick={closeConfirmation}
-                style={secondaryButtonStyle}
-              >
+              <button type="button" onClick={closeConfirmation} style={secondaryButtonStyle}>
                 Cancel
               </button>
-
-              <button
-                type="button"
-                onClick={confirmAction}
-                style={getConfirmButtonStyle()}
-              >
+              <button type="button" onClick={confirmAction} style={getConfirmButtonStyle()}>
                 {actionType === 'delete'
                   ? 'Delete Account'
                   : actionType === 'deactivate'
@@ -960,7 +777,6 @@ function StaffManagement() {
         </div>
       )}
 
-      {/* Toast */}
       {toast && (
         <div
           style={{
@@ -982,26 +798,15 @@ function StaffManagement() {
             fontSize: '12px',
           }}
         >
-          <span
-            style={{
-              color: '#198754',
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
+          <span style={{ color: '#198754', display: 'flex', alignItems: 'center' }}>
             <ToastIcon />
           </span>
-
           <span>{toast}</span>
         </div>
       )}
     </>
   )
 }
-
-/* ---------------------------
-   Styles
----------------------------- */
 
 const tableHeaderStyle: CSSProperties = {
   padding: '11px 16px',

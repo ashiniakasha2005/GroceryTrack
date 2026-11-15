@@ -1,218 +1,324 @@
 import express from "express";
 import db from "../config/db";
 
-import { authenticateToken } from "../middleware/authMiddleware";
+import {
+    authenticateToken,
+    adminOnly
+} from "../middleware/authMiddleware";
 
-interface SaleItem {
-    product_id: number;
-    quantity: number;
-    price: number;
-    subtotal: number;
-}
+import { ResultSetHeader, RowDataPacket } from "mysql2";
+import type { PoolConnection } from "mysql2/promise";
 
 const router = express.Router();
 
+// DATABASE PRODUCT TYPE
+interface ProductRow extends RowDataPacket {
+    product_id: number;
+    product_name: string;
+    price: string | number;
+    current_stock: number;
+    minimum_stock: number;
+}
 
+// SALE ITEM TYPE
+interface SaleItem {
+    product_id: number;
+    quantity: number;
+    unit_price: number;
+    subtotal: number;
+    updated_stock: number;
+    minimum_stock: number;
+    low_stock: boolean;
+}
+
+// =========================
 // CREATE SALE
+// =========================
+
 router.post("/", authenticateToken, async (req, res) => {
 
-    const connection = await db.getConnection();
+    if (!req.user) {
+        return res.status(401).json({
+            message: "User not authenticated"
+        });
+    }
+
+    let connection: PoolConnection | undefined;
+    let transactionStarted = false;
 
     try {
-
         const { items } = req.body;
 
-        if (!items || !Array.isArray(items) || items.length === 0) {
+        if (!Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
                 message: "Sale items are required"
             });
         }
 
-        await connection.beginTransaction();
+        const productQuantities = new Map<number, number>();
 
-        let totalAmount = 0;
-
-        const saleItems: SaleItem[] = [];
-
-        // CHECK PRODUCTS AND STOCK
         for (const item of items) {
 
-            const {
-                product_id,
-                quantity
-            } = item;
-
-            if (!product_id || !quantity || quantity <= 0) {
-
-                await connection.rollback();
-
+            if (
+                !item ||
+                !Number.isInteger(Number(item.product_id)) ||
+                !Number.isInteger(Number(item.quantity)) ||
+                Number(item.product_id) <= 0 ||
+                Number(item.quantity) <= 0
+            ) {
                 return res.status(400).json({
-                    message:
-                        "product_id and valid quantity are required"
+                    message: "product_id and valid quantity are required"
                 });
             }
 
-            const [products] = await connection.execute<any>(
-                `SELECT *
+            const productId = Number(item.product_id);
+            const quantity = Number(item.quantity);
+
+            productQuantities.set(
+                productId,
+                (productQuantities.get(productId) || 0) + quantity
+            );
+        }
+
+        connection = await db.getConnection();
+
+        await connection.beginTransaction();
+        transactionStarted = true;
+
+        let totalAmountCents = 0;
+
+        const saleItems: SaleItem[] = [];
+
+        const sortedProducts = [...productQuantities.entries()]
+            .sort((a, b) => a[0] - b[0]);
+
+        for (const [productId, quantity] of sortedProducts) {
+
+            const [products] = await connection.execute<ProductRow[]>(
+                `SELECT
+                    product_id,
+                    product_name,
+                    price,
+                    current_stock,
+                    minimum_stock
                  FROM products
-                 WHERE id = ?
+                 WHERE product_id = ?
                  FOR UPDATE`,
-                [product_id]
+                [productId]
             );
 
             if (products.length === 0) {
-
                 await connection.rollback();
+                transactionStarted = false;
 
                 return res.status(404).json({
-                    message:
-                        `Product ${product_id} not found`
+                    message: `Product ${productId} not found`
                 });
             }
 
             const product = products[0];
+            const availableStock = Number(product.current_stock);
 
-            if (product.stock_quantity < quantity) {
-
+            if (availableStock < quantity) {
                 await connection.rollback();
+                transactionStarted = false;
 
                 return res.status(400).json({
-                    message:
-                        `Insufficient stock for ${product.name}`
+                    message: `Insufficient stock for ${product.product_name}`,
+                    available_stock: availableStock,
+                    requested_quantity: quantity
                 });
             }
 
-            const subtotal =
-                Number(product.price) * Number(quantity);
+            const unitPriceCents = Math.round(
+                Number(product.price) * 100
+            );
 
-            totalAmount += subtotal;
+            if (!Number.isFinite(unitPriceCents) || unitPriceCents < 0) {
+                throw new Error("Invalid product price");
+            }
+
+            const subtotalCents = unitPriceCents * quantity;
+
+            totalAmountCents += subtotalCents;
+
+            // Calculate updated stock
+            const updatedStock = availableStock - quantity;
+            const minimumStock = Number(product.minimum_stock);
 
             saleItems.push({
-                product_id,
+                product_id: product.product_id,
                 quantity,
-                price: product.price,
-                subtotal
+                unit_price: unitPriceCents / 100,
+                subtotal: subtotalCents / 100,
+                updated_stock: updatedStock,
+                minimum_stock: minimumStock,
+                low_stock: updatedStock <= minimumStock
             });
         }
 
+        const totalAmount = totalAmountCents / 100;
 
-        if (!req.user) {
-            await connection.rollback();
-            return res.status(401).json({
-                message: "User not authenticated"
-            });
-        }
-
-        // CREATE SALE
-        const [saleResult] = await connection.execute<any>(
+        const [saleResult] = await connection.execute<ResultSetHeader>(
             `INSERT INTO sales
-             (user_id, total_amount)
-             VALUES (?, ?)`,
-            [
-                req.user.id,
-                totalAmount
-            ]
+             (user_id, total_amount, status)
+             VALUES (?, ?, 'completed')`,
+            [req.user.id, totalAmount]
         );
 
         const saleId = saleResult.insertId;
 
-
-        // CREATE SALE ITEMS + REDUCE STOCK
         for (const item of saleItems) {
+            // Record sale item
+            await connection.execute(
+                `INSERT INTO sale_items
+                    (sale_id, product_id, quantity, unit_price, subtotal)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    saleId,
+                    item.product_id,
+                    item.quantity,
+                    item.unit_price,
+                    item.subtotal
+                ]
+            );
 
-            await connection.execute<any>(`
-                INSERT INTO sale_items
-                (sale_id, product_id, quantity, price, subtotal)
-                VALUES (?, ?, ?, ?, ?)
-            `, [
-                saleId,
-                item.product_id,
-                item.quantity,
-                item.price,
-                item.subtotal
-            ]);
+            const [updateResult] = await connection.execute<ResultSetHeader>(
+                `UPDATE products
+                 SET current_stock = current_stock - ?
+                 WHERE product_id = ?
+                 AND current_stock >= ?`,
+                [
+                    item.quantity,
+                    item.product_id,
+                    item.quantity
+                ]
+            );
 
-            await connection.execute<any>(`
-                UPDATE products
-                SET stock_quantity =
-                    stock_quantity - ?
-                WHERE id = ?
-            `, [
-                item.quantity,
-                item.product_id
-            ]);
+            if (updateResult.affectedRows !== 1) {
+                throw new Error(
+                    `Stock update failed for product ${item.product_id}`
+                );
+            }
+
+            await connection.execute<ResultSetHeader>(
+                `INSERT INTO stock_movements
+                 (product_id, change_qty, reason, sale_id, user_id)
+                 VALUES (?, ?, 'SALE', ?, ?)`,
+                [
+                    item.product_id,
+                    -item.quantity,
+                    saleId,
+                    req.user.id
+                ]
+            );
         }
 
-
+        // Commit all changes together
         await connection.commit();
+        transactionStarted = false;
 
-        res.status(201).json({
+        return res.status(201).json({
             message: "Sale completed successfully",
             sale_id: saleId,
-            total_amount: totalAmount
+            user_id: req.user.id,
+            total_amount: totalAmount.toFixed(2),
+
+            items: saleItems,
+
+            low_stock_products: saleItems
+                .filter(item => item.low_stock)
+                .map(item => ({
+                    product_id: item.product_id,
+                    updated_stock: item.updated_stock,
+                    minimum_stock: item.minimum_stock
+                }))
         });
 
-    } catch (error) {
+    } catch (error: unknown) {
 
-        await connection.rollback();
+        if (connection && transactionStarted) {
+            await connection.rollback();
+        }
 
-        res.status(500).json({
-            message: "Sale failed",
-            error: error.message
+        console.error("Sale creation error:", error);
+
+        return res.status(500).json({
+            message: "Sale failed"
         });
 
     } finally {
 
-        connection.release();
+        connection?.release();
     }
 });
 
 
+// =========================
 // GET ALL SALES
-router.get("/", authenticateToken, async (req, res) => {
+// =========================
 
+router.get("/", authenticateToken, async (req, res) => {
     try {
 
-        const [sales] = await db.execute<any>(`
+        // Added a subquery to get the total items sold for this sale
+        const [sales] = await db.execute<RowDataPacket[]>(`
             SELECT
-                s.id,
+                s.sale_id,
+                s.user_id,
+                s.sale_date_time,
                 s.total_amount,
-                s.sale_date,
-                u.name AS sold_by
-            FROM sales s
-            LEFT JOIN users u
+                s.sale_date_time,
+                s.total_amount,
+                s.status,
+                u.name AS sold_by,
+                (SELECT COALESCE(SUM(quantity), 0) FROM sale_items WHERE sale_id = s.sale_id) AS total_items
+             FROM sales s
+             LEFT JOIN users u
                 ON s.user_id = u.id
-            ORDER BY s.id DESC
+            ORDER BY s.sale_id DESC
         `);
 
-        res.json(sales);
+        return res.status(200).json(sales);
 
-    } catch (error) {
+    } catch (error: unknown) {
 
-        res.status(500).json({
-            message: "Failed to get sales",
-            error: error.message
+        console.error("Get sales error:", error);
+
+        return res.status(500).json({
+            message: "Failed to get sales"
         });
     }
 });
 
 
+// =========================
 // GET SINGLE SALE
+// =========================
+
 router.get("/:id", authenticateToken, async (req, res) => {
-
     try {
+        const saleId = Number(req.params.id);
 
-        const [sales] = await db.execute<any>(`
+        if (!Number.isSafeInteger(saleId) || saleId <= 0) {
+            return res.status(400).json({
+                message: "Invalid sale ID"
+            });
+        }
+
+        const [sales] = await db.execute<RowDataPacket[]>(`
             SELECT
-                s.id,
+                s.sale_id,
+                s.user_id,
+                s.sale_date_time,
                 s.total_amount,
-                s.sale_date,
+                s.status,
                 u.name AS sold_by
-            FROM sales s
-            LEFT JOIN users u
+             FROM sales s
+             LEFT JOIN users u
                 ON s.user_id = u.id
-            WHERE s.id = ?
-        `, [req.params.id]);
+            WHERE s.sale_id = ?
+        `, [saleId]);
 
         if (sales.length === 0) {
             return res.status(404).json({
@@ -220,30 +326,208 @@ router.get("/:id", authenticateToken, async (req, res) => {
             });
         }
 
-        const [items] = await db.execute<any>(`
+        const [items] = await db.execute<RowDataPacket[]>(`
             SELECT
                 si.product_id,
-                p.name AS product_name,
+                p.product_name,
                 si.quantity,
-                si.price,
+                si.unit_price,
                 si.subtotal
             FROM sale_items si
             JOIN products p
-                ON si.product_id = p.id
+                ON si.product_id = p.product_id
             WHERE si.sale_id = ?
-        `, [req.params.id]);
+        `, [saleId]);
 
-        res.json({
+        return res.status(200).json({
             sale: sales[0],
             items
         });
 
-    } catch (error) {
+    } catch (error: unknown) {
 
-        res.status(500).json({
-            message: "Failed to get sale",
-            error: error.message
+        console.error("Get single sale error:", error);
+
+        return res.status(500).json({
+            message: "Failed to get sale"
         });
+    }
+});
+
+
+// =========================
+// CANCEL SALE (ADMIN ONLY)
+// =========================
+
+router.put("/:id/cancel", authenticateToken, adminOnly, async (req, res) => {
+
+    let connection: PoolConnection | undefined;
+    let transactionStarted = false;
+
+    try {
+
+        const saleId = Number(req.params.id);
+
+        if (!Number.isInteger(saleId) || saleId <= 0) {
+            return res.status(400).json({
+                message: "Invalid sale ID"
+            });
+        }
+
+        if (!req.user) {
+            return res.status(401).json({
+                message: "User not authenticated"
+            });
+        }
+
+        connection = await db.getConnection();
+
+        await connection.beginTransaction();
+        transactionStarted = true;
+
+        // LOCK SALE RECORD
+        const [sales] = await connection.execute<RowDataPacket[]>(
+            `SELECT sale_id, user_id, status
+             FROM sales
+             WHERE sale_id = ?
+             FOR UPDATE`,
+            [saleId]
+        );
+
+        if (sales.length === 0) {
+            await connection.rollback();
+            transactionStarted = false;
+
+            return res.status(404).json({
+                message: "Sale not found"
+            });
+        }
+
+        const sale = sales[0];
+
+        if (sale.status === "cancelled") {
+            await connection.rollback();
+            transactionStarted = false;
+
+            return res.status(400).json({
+                message: "Sale is already cancelled"
+            });
+        }
+
+        // GET ORIGINAL SALE ITEMS
+        const [items] = await connection.execute<RowDataPacket[]>(
+            `SELECT product_id, quantity
+             FROM sale_items
+             WHERE sale_id = ?`,
+            [saleId]
+        );
+
+        if (items.length === 0) {
+            throw new Error("No sale items found");
+        }
+
+        // RESTORE STOCK AND RECORD CANCEL MOVEMENTS
+        const sortedItems = [...items].sort(
+            (a, b) => Number(a.product_id) - Number(b.product_id)
+        );
+
+        for (const item of sortedItems) {
+
+            const productId = Number(item.product_id);
+            const quantity = Number(item.quantity);
+
+            const [products] = await connection.execute<ProductRow[]>(
+                `SELECT product_id
+                 FROM products
+                 WHERE product_id = ?
+                 FOR UPDATE`,
+                [productId]
+            );
+
+            if (products.length === 0) {
+                throw new Error(`Product ${productId} not found`);
+            }
+
+            await connection.execute<ResultSetHeader>(
+                `UPDATE products
+                 SET current_stock = current_stock + ?
+                 WHERE product_id = ?`,
+                [quantity, productId]
+            );
+
+            await connection.execute<ResultSetHeader>(
+                `INSERT INTO stock_movements
+                 (product_id, change_qty, reason, sale_id, user_id)
+                 VALUES (?, ?, 'CANCEL', ?, ?)`,
+                [
+                    productId,
+                    quantity,
+                    saleId,
+                    req.user.id
+                ]
+            );
+        }
+
+        // UPDATE SALE STATUS
+        await connection.execute<ResultSetHeader>(
+            `UPDATE sales
+             SET status = 'cancelled',
+                 cancelled_at = CURRENT_TIMESTAMP,
+                 cancelled_by = ?
+             WHERE sale_id = ?`,
+            [req.user.id, saleId]
+        );
+
+        // Retrieve updated stock levels and recalculate low-stock status.
+        const [updatedProducts] = await connection.execute<RowDataPacket[]>(
+            `SELECT
+                p.product_id,
+                p.product_name,
+                p.current_stock AS stock_quantity,
+                p.minimum_stock,
+                CASE
+                    WHEN p.current_stock <= p.minimum_stock
+                    THEN 'LOW STOCK'
+                    ELSE 'AVAILABLE'
+                END AS stock_status
+             FROM products p
+             INNER JOIN sale_items si
+                ON p.product_id = si.product_id
+             WHERE si.sale_id = ?
+             ORDER BY p.product_id`,
+            [saleId]
+        );
+
+        // Commit after all database operations succeed.
+        await connection.commit();
+        transactionStarted = false;
+
+        return res.status(200).json({
+            message: "Sale cancelled successfully",
+            sale_id: saleId,
+            cancelled_by: req.user.id,
+            restored_items: items.length,
+            updated_products: updatedProducts
+        });
+
+    } catch (error: unknown) {
+
+        if (connection && transactionStarted) {
+            await connection.rollback();
+            transactionStarted = false;
+        }
+
+        console.error("Cancel sale error:", error);
+
+        return res.status(500).json({
+            message: "Failed to cancel sale"
+        });
+
+    } finally {
+
+        if (connection) {
+            connection.release();
+        }
     }
 });
 

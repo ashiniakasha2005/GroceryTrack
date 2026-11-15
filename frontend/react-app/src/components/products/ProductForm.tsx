@@ -37,6 +37,8 @@ function ProductForm({
   const [minimumStock, setMinimumStock] = useState(
     initialValues ? String(initialValues.minimumStock) : '',
   )
+  // NEW: stock being added on top of the current stock (edit mode only)
+  const [addStock, setAddStock] = useState('')
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
@@ -44,6 +46,18 @@ function ProductForm({
   const unitOptions = UNIT_OPTIONS.includes(unit)
     ? UNIT_OPTIONS
     : [unit, ...UNIT_OPTIONS]
+
+  // NEW: live preview of the stock after saving
+  const addAmount = addStock.trim() === '' ? 0 : Number(addStock)
+  const baseStock = Number(currentStock)
+  const previewStock =
+    isEditing &&
+    Number.isInteger(addAmount) &&
+    addAmount > 0 &&
+    Number.isInteger(baseStock) &&
+    currentStock.trim() !== ''
+      ? baseStock + addAmount
+      : null
 
   // Close with the Escape key
   useEffect(() => {
@@ -96,6 +110,15 @@ function ProductForm({
       return
     }
 
+    // NEW: validate the optional "Add Stock" amount
+    const parsedAddStock =
+      isEditing && addStock.trim() !== '' ? Number(addStock) : 0
+
+    if (!Number.isInteger(parsedAddStock) || parsedAddStock < 0) {
+      setError('Stock to add must be a whole number greater than or equal to zero.')
+      return
+    }
+
     setIsSaving(true)
 
     try {
@@ -104,7 +127,8 @@ function ProductForm({
         category,
         unit: unit.trim() || 'pcs',
         price: parsedPrice,
-        currentStock: parsedCurrentStock,
+        // CHANGED: current stock plus anything added
+        currentStock: parsedCurrentStock + parsedAddStock,
         minimumStock: parsedMinimumStock,
       })
     } catch (err) {
@@ -231,6 +255,25 @@ function ProductForm({
               required
             />
           </div>
+          {/* NEW: restock field, shown only when editing */}
+          {isEditing && (
+            <div className="product-form-field product-form-field-full">
+              <label htmlFor="product-add-stock">Add Stock (optional)</label>
+              <input
+                id="product-add-stock"
+                name="addStock"
+                type="number"
+                min="0"
+                step="1"
+                value={addStock}
+                onChange={(event) => setAddStock(event.target.value)}
+                placeholder="0"
+              />
+              {previewStock !== null && (
+                <small>New stock after saving: {previewStock}</small>
+              )}
+            </div>
+          )}
         </div>
 
         <footer className="product-form-actions">

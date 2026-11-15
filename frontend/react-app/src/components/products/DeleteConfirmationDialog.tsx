@@ -35,8 +35,13 @@ function DeleteConfirmationDialog({
 
     try {
       await onConfirm()
-    } catch {
-      setError('Failed to delete the product. Please try again.')
+    } catch (err: unknown) {
+      // Backend එකෙන් එන ඇත්ත Error Message එක පෙන්නන්න
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'Failed to delete the product. Please try again.'
+      )
       setIsDeleting(false)
     }
   }
@@ -93,7 +98,7 @@ function DeleteConfirmationDialog({
         </p>
 
         {error && (
-          <p role="alert" className="mt-3 text-xs text-[#dc3545]">
+          <p role="alert" className="mt-3 rounded-md bg-red-50 p-2 text-xs font-medium text-[#dc3545]">
             {error}
           </p>
         )}
