@@ -6,7 +6,7 @@ const API_URL = 'http://localhost:3000/api'
 interface ApiProduct {
   id: number
   name: string
-  category: string
+  category: string | null
   price: number
   stock_quantity: number
   minimum_stock: number
@@ -22,7 +22,7 @@ function toProduct(item: ApiProduct): Product {
   return {
     id: Number(item.id),
     name: item.name,
-    categoryName: item.category,
+    categoryName: item.category ?? '',
     price: Number(item.price),
     currentStock: Number(item.stock_quantity),
     minStockLevel: Number(item.minimum_stock),
@@ -227,7 +227,7 @@ export default function SalesPage() {
       setCheckoutError('')
       setCheckoutMessage('')
 
-      const result = await request('/sales', {
+      await request('/sales', {
         method: 'POST',
         body: JSON.stringify({
           items: cart.map((item) => ({
@@ -238,9 +238,7 @@ export default function SalesPage() {
       })
 
       setCart([])
-      setCheckoutMessage(
-        `Sale completed successfully! Sale ID: ${result.sale_id}`,
-      )
+      setCheckoutMessage('Sale completed successfully!')
 
       await fetchProducts()
     } catch (error) {
@@ -274,12 +272,7 @@ export default function SalesPage() {
           </p>
         </div>
 
-        {/* Success message */}
-        {checkoutMessage && (
-          <div className="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-700">
-            {checkoutMessage}
-          </div>
-        )}
+        
 
         {/* Checkout error */}
         {checkoutError && (
@@ -386,20 +379,32 @@ export default function SalesPage() {
             </div>
           </section>
 
-          {/* Current sale / Cart */}
-          <section className="flex flex-col justify-between rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div>
+                          {/* Current sale / Cart */}
+          <section className="flex flex-col rounded-xl border border-gray-200 bg-white p-5 shadow-sm lg:max-h-[calc(100vh-140px)]">
+            {/* Top part: Header, Success Message, and Scrollable Cart Items */}
+            <div className="flex flex-1 flex-col min-h-0">
+              
               {/* Cart header */}
-              <div className="mb-4 flex items-center gap-2 border-b border-gray-200 pb-3">
+              <div className="mb-4 flex shrink-0 items-center gap-2 border-b border-gray-200 pb-3">
                 <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H19m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
                 <h2 className="text-base font-semibold text-gray-900">Cart / Checkout</h2>
               </div>
 
-              {/* Cart items or empty state */}
+              {/* Success Message */}
+              {checkoutMessage && (
+                <div className="mb-4 shrink-0 flex items-start gap-2 rounded-md border border-[#BADBCC] bg-[#D1E7DD] p-3 text-sm font-medium text-[#0F5132]">
+                  <svg className="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{checkoutMessage}</span>
+                </div>
+              )}
+
+              {/* Cart items or empty state (This is the part that scrolls) */}
               {cart.length === 0 ? (
-                <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
+                <div className="flex flex-1 flex-col items-center justify-center text-center">
                   <svg className="mb-3 h-12 w-12 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H19m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
@@ -407,7 +412,7 @@ export default function SalesPage() {
                   <p className="mt-1 text-xs text-gray-400">Add products from the left panel.</p>
                 </div>
               ) : (
-                <div className="max-h-[40vh] space-y-4 overflow-y-auto pr-1">
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                   {cart.map((item) => (
                     <div key={item.product.id} className="border-b border-gray-100 pb-3">
                       <div className="flex justify-between gap-3">
@@ -451,8 +456,8 @@ export default function SalesPage() {
               )}
             </div>
 
-            {/* Total, payment method and checkout */}
-            <div className="mt-6 space-y-4 border-t border-gray-200 pt-4">
+            {/* Bottom part: Total and Checkout Button (Stays fixed at the bottom) */}
+            <div className="mt-4 shrink-0 space-y-4 border-t border-gray-200 pt-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-gray-900">Total Amount</span>
                 <span className="text-xl font-bold text-gray-900">Rs. {total.toFixed(2)}</span>
@@ -469,7 +474,11 @@ export default function SalesPage() {
                 type="button"
                 onClick={handleCheckout}
                 disabled={cart.length === 0 || checkingOut}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-200 py-3 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-300 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                className={`flex w-full items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold shadow-sm transition ${
+                  cart.length > 0
+                    ? 'bg-[#198754] text-white hover:bg-[#157347]'
+                    : 'bg-[#E9ECEF] text-[#ADB5BD] cursor-not-allowed'
+                }`}
               >
                 {checkingOut ? (
                   'Processing...'
@@ -483,7 +492,7 @@ export default function SalesPage() {
                 )}
               </button>
             </div>
-          </section>
+          </section>             
         </div>
       </div>
     </div>

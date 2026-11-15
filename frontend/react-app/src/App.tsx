@@ -46,7 +46,6 @@ function App() {
             })()
           }
         />
-        <Route path="/products" element={<ProductManagement />} />
         <Route path="/stock" element={<InventoryList />} />
       </Route>
 
