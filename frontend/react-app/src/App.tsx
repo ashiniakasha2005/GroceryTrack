@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import Dashboard from './pages/Dashboard'
 import StaffManagement from './pages/StaffManagement'
-import ProductManagement from './pages/ProductManagement'
 import ProductsPage from './pages/ProductsPage'
 import SalesPage from './pages/SalesPage'
 import Login from './pages/Login'
@@ -28,16 +27,31 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/inventory" element={<ProductsPage />} />
         <Route path="/sales" element={<SalesPage />} />
-        <Route path="/staff" element={<StaffManagement />} />
-        <Route path="/products" element={<ProductManagement />} />
+                <Route
+          path="/staff"
+          element={
+            (() => {
+              try {
+                const user = JSON.parse(localStorage.getItem('user') ?? 'null')
+                return user?.role?.toLowerCase() === 'admin'
+                  ? <StaffManagement />
+                  : <Navigate to="/dashboard" replace />
+              } catch {
+                return <Navigate to="/dashboard" replace />
+              }
+            })()
+          }
+        />
                 <Route
           path="/categories"
           element={
             (() => {
               try {
                 const user = JSON.parse(localStorage.getItem('user') ?? 'null')
-
-                return user?.role?.toLowerCase() === 'admin'
+                const role = user?.role?.toLowerCase()
+                
+                // ALLOW BOTH ADMIN AND STAFF
+                return role === 'admin' || role === 'staff'
                   ? <CategoryManagement />
                   : <Navigate to="/dashboard" replace />
               } catch {
