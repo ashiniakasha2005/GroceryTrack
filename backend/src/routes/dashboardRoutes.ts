@@ -20,6 +20,7 @@ router.get("/", authenticateToken, async (req, res) => {
         const [productCount] = await db.execute<any>(`
             SELECT COUNT(*) AS total_products
             FROM products
+            WHERE is_active = 1
         `);
 
         // BE-02: Total recorded sales transactions (Only completed sales)
@@ -32,6 +33,7 @@ router.get("/", authenticateToken, async (req, res) => {
             SELECT COUNT(*) AS low_stock_products
             FROM products
             WHERE current_stock <= minimum_stock
+                AND is_active = 1
         `);
 
         res.json({

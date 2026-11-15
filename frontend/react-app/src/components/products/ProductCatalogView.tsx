@@ -11,6 +11,7 @@ type ProductCatalogViewProps = {
   toolbar?: ReactNode // search bar slot (FE 4)
   emptyMessage?: string // e.g. "No products match your search."
   onAdd: () => void
+  onAddCategory?: () => void
   onEdit: (product: Product) => void
   onDelete: (product: Product) => void
 }
@@ -28,6 +29,7 @@ function ProductCatalogView({
   toolbar,
   emptyMessage = 'No products to display.',
   onAdd,
+  onAddCategory,
   onEdit,
   onDelete,
 }: ProductCatalogViewProps) {
@@ -36,7 +38,7 @@ function ProductCatalogView({
 
   return (
     <div>
-      {/* Heading row */}
+            {/* Heading row */}
       <div className="mb-[18px] flex items-start justify-between">
         <div>
           <h2 className="text-[18px] font-bold text-[#212529]">
@@ -51,29 +53,40 @@ function ProductCatalogView({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex h-[39px] w-[176px] shrink-0 items-center justify-center gap-[7px] rounded-[7px] bg-[#0d6efd] px-[18px] py-[9px] text-[13px] font-semibold text-white transition hover:bg-[#0b5ed7]"
-        >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M12 5v14" />
-            <path d="M5 12h14" />
-          </svg>
-          Add New Product
-        </button>
-      </div>
+        <div className="flex items-center gap-3">
+          {onAddCategory && (
+            <button
+              type="button"
+              onClick={onAddCategory}
+              className="inline-flex h-[39px] shrink-0 items-center justify-center gap-[7px] rounded-[7px] bg-[#0d6efd] px-[18px] py-[9px] text-[13px] font-semibold text-white transition hover:bg-[#0b5ed7]"
+            >
+              + Add Category
+            </button>
+          )}
 
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex h-[39px] w-[176px] shrink-0 items-center justify-center gap-[7px] rounded-[7px] bg-[#0d6efd] px-[18px] py-[9px] text-[13px] font-semibold text-white transition hover:bg-[#0b5ed7]"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+            Add New Product
+          </button>
+        </div>
+      </div>
       {/* Search bar slot */}
       {toolbar && <div className="mb-[18px]">{toolbar}</div>}
 

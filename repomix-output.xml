@@ -132,7 +132,6 @@ frontend/
         CategoryManagement.tsx
         Dashboard.tsx
         Login.tsx
-        LowStockAlerts.tsx
         NotFound.tsx
         ProductManagement.tsx
         ProductsPage.tsx
@@ -1244,287 +1243,6 @@ export default function InventoryList() {
 }
 </file>
 
-<file path="frontend/react-app/src/pages/LowStockAlerts.tsx">
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-
-// Sprint 4 – US-010
-// FE-01: In-system low-stock alert / list view
-// FE-02: Show product name and current stock per alert entry
-
-const API_URL = 'http://localhost:3000/api'
-
-type ApiLowStockProduct = {
-  id?: number | string
-  product_id?: number | string
-  name?: string
-  product_name?: string
-  stock_quantity?: number | string
-  current_stock?: number | string
-  stock_qty?: number | string
-  minimum_stock?: number | string
-  min_stock_level?: number | string
-}
-
-type LowStockAlert = {
-  id: string
-  name: string
-  stock: number
-  minStock: number
-}
-
-function toAlert(p: ApiLowStockProduct): LowStockAlert {
-  return {
-    id: String(p.id ?? p.product_id ?? p.name ?? p.product_name),
-    name: p.name ?? p.product_name ?? 'Unnamed product',
-    stock: Number(p.stock_quantity ?? p.current_stock ?? p.stock_qty) || 0,
-    minStock: Number(p.minimum_stock ?? p.min_stock_level) || 0,
-  }
-}
-
-export default function LowStockAlerts() {
-  const [alerts, setAlerts] = useState<LowStockAlert[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-
-  // Function for the "Refresh" button
-  async function loadAlerts() {
-    setLoading(true)
-    setError('')
-    try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_URL}/inventory/low-stock/list`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('Your session has expired. Please log in again.')
-      }
-      if (!res.ok) {
-        throw new Error(`Server responded with ${res.status}`)
-      }
-
-      const data = await res.json()
-      const list: ApiLowStockProduct[] = Array.isArray(data)
-        ? data
-        : data.products ?? data.data ?? []
-
-      const sorted = list.map(toAlert).sort((a, b) => a.stock - b.stock)
-
-      setAlerts(sorted)
-      setLastUpdated(new Date())
-    } catch (err) {
-      setAlerts([])
-      setError(
-        err instanceof Error && err.message !== 'Failed to fetch'
-          ? err.message
-          : 'Cannot reach the server (http://localhost:3000). Is the backend running?',
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // FIXED: Avoid calling setState synchronously in useEffect by using an IIFE and isMounted flag
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchInitialAlerts = async () => {
-      try {
-        const token = localStorage.getItem('token')
-        const res = await fetch(`${API_URL}/inventory/low-stock/list`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-
-        if (res.status === 401 || res.status === 403) {
-          throw new Error('Your session has expired. Please log in again.')
-        }
-        if (!res.ok) {
-          throw new Error(`Server responded with ${res.status}`)
-        }
-
-        const data = await res.json()
-        const list: ApiLowStockProduct[] = Array.isArray(data)
-          ? data
-          : data.products ?? data.data ?? []
-
-        const sorted = list.map(toAlert).sort((a, b) => a.stock - b.stock)
-
-        if (isMounted) {
-          setAlerts(sorted)
-          setLastUpdated(new Date())
-          setLoading(false)
-        }
-      } catch (err) {
-        if (isMounted) {
-          setAlerts([])
-          setError(
-            err instanceof Error && err.message !== 'Failed to fetch'
-              ? err.message
-              : 'Cannot reach the server (http://localhost:3000). Is the backend running?',
-          )
-          setLoading(false)
-        }
-      }
-    }
-
-    void fetchInitialAlerts();
-    return () => { isMounted = false };
-  }, [])
-
-  const outOfStockCount = alerts.filter((a) => a.stock <= 0).length
-
-  return (
-    <div>
-      {/* Header */}
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-[#212529]">Low-Stock Alerts</h2>
-          <p className="mt-1 text-sm text-[#6c757d]">
-            Products at or below their minimum stock level.
-            {lastUpdated && (
-              <span className="ml-1 text-[#adb5bd]">
-                Last updated {lastUpdated.toLocaleTimeString()}.
-              </span>
-            )}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={loadAlerts}
-          disabled={loading}
-          className="rounded-md bg-[#0d6efd] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0b5ed7] disabled:opacity-60"
-        >
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
-      </div>
-
-      {/* Summary */}
-      {!loading && !error && alerts.length > 0 && (
-        <div className="mb-5 flex items-start gap-3 rounded-lg border border-[#f5c2c7] bg-[#f8d7da] px-4 py-3 text-sm text-[#842029]">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="mt-0.5 shrink-0"
-          >
-            <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-            <path d="M12 9v4" />
-            <path d="M12 17h.01" />
-          </svg>
-          <span>
-            <strong>
-              {alerts.length} product{alerts.length === 1 ? '' : 's'}
-            </strong>{' '}
-            need{alerts.length === 1 ? 's' : ''} restocking
-            {outOfStockCount > 0 && (
-              <>
-                {' '}
-                ({outOfStockCount} out of stock)
-              </>
-            )}
-            .
-          </span>
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div className="mb-5 flex items-center justify-between gap-4 rounded-lg border border-[#ffe69c] bg-[#fff3cd] px-4 py-3 text-sm text-[#664d03]">
-          <span>{error}</span>
-          <button type="button" onClick={loadAlerts} className="font-semibold underline">
-            Try again
-          </button>
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div className="rounded-lg border border-[#e9ecef] bg-white px-4 py-10 text-center text-sm text-[#6c757d]">
-          Loading low-stock alerts…
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!loading && !error && alerts.length === 0 && (
-        <div className="rounded-lg border border-[#badbcc] bg-[#d1e7dd] px-4 py-10 text-center">
-          <div className="text-base font-semibold text-[#0f5132]">All stocked up!</div>
-          <div className="mt-1 text-sm text-[#0f5132]">
-            No products are currently below their minimum stock level.
-          </div>
-        </div>
-      )}
-
-      {/* Alert list */}
-      {!loading && !error && alerts.length > 0 && (
-        <ul className="space-y-3">
-          {alerts.map((alert) => {
-            const isOut = alert.stock <= 0
-            return (
-              <li
-                key={alert.id}
-                className={`flex flex-wrap items-center justify-between gap-4 rounded-lg border bg-white px-5 py-4 shadow-sm ${
-                  isOut ? 'border-l-4 border-l-[#212529]' : 'border-l-4 border-l-[#dc3545]'
-                }`}
-              >
-                {/* FE-02: product name */}
-                <div className="min-w-0">
-                  <div className="truncate text-base font-semibold text-[#212529]">
-                    {alert.name}
-                  </div>
-                  <div className="mt-1 text-xs text-[#6c757d]">
-                    Minimum stock level: {alert.minStock}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-5">
-                  {/* FE-02: current stock */}
-                  <div className="text-right">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[#adb5bd]">
-                      Current stock
-                    </div>
-                    <div
-                      className={`text-xl font-bold ${isOut ? 'text-[#212529]' : 'text-[#dc3545]'}`}
-                    >
-                      {alert.stock}
-                    </div>
-                  </div>
-
-                  <span
-                    className={`rounded px-2.5 py-1 text-xs font-semibold text-white ${
-                      isOut ? 'bg-[#212529]' : 'bg-[#dc3545]'
-                    }`}
-                  >
-                    {isOut ? 'Out of Stock' : 'Low Stock'}
-                  </span>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      {!loading && !error && alerts.length > 0 && (
-        <p className="mt-4 text-xs text-[#6c757d]">
-          Restock these items from the{' '}
-          <Link to="/inventory" className="font-semibold text-[#0d6efd] hover:underline">
-            Inventory
-          </Link>{' '}
-          page.
-        </p>
-      )}
-    </div>
-  )
-}
-</file>
-
 <file path="backend/src/controllers/categoryController.ts">
 import { Request, Response } from "express";
 import db from "../config/db";
@@ -1555,8 +1273,7 @@ export const getCategoryById = async (req: Request, res: Response) => {
     try {
 
         const [categories] = await db.execute<any>(
-            "SELECT category_id AS id, category_name AS name FROM categories WHERE category_id = ?",
-            [req.params.id]
+            "SELECT category_id AS id, category_name AS name FROM categories WHERE is_active = 1 ORDER BY category_id DESC"
         );
 
         if (categories.length === 0) {
@@ -1647,11 +1364,10 @@ export const updateCategory = async (req: Request, res: Response) => {
 
 // DELETE /api/categories/:id
 export const deleteCategory = async (req: Request, res: Response) => {
-
     try {
-
+        // WE ARE UPDATING, NOT DELETING
         const [result] = await db.execute<any>(
-            "DELETE FROM categories WHERE category_id = ?",
+            "UPDATE categories SET is_active = 0 WHERE category_id = ?",
             [req.params.id]
         );
 
@@ -1662,13 +1378,12 @@ export const deleteCategory = async (req: Request, res: Response) => {
         }
 
         res.json({
-            message: "Category deleted successfully"
+            message: "Category hidden successfully"
         });
 
-    } catch (error) {
-
+    } catch (error: any) {
         res.status(500).json({
-            message: "Failed to delete category",
+            message: "Failed to hide category",
             error: error.message
         });
     }
@@ -1720,6 +1435,7 @@ router.get("/", authenticateToken, async (req, res) => {
         const [productCount] = await db.execute<any>(`
             SELECT COUNT(*) AS total_products
             FROM products
+            WHERE is_active = 1
         `);
 
         // BE-02: Total recorded sales transactions (Only completed sales)
@@ -1732,6 +1448,7 @@ router.get("/", authenticateToken, async (req, res) => {
             SELECT COUNT(*) AS low_stock_products
             FROM products
             WHERE current_stock <= minimum_stock
+                AND is_active = 1
         `);
 
         res.json({
@@ -2649,6 +2366,62 @@ export default EditProductForm
 .confirm-delete-button:hover {
   background: #b91c1c;
 }
+</file>
+
+<file path="frontend/react-app/src/components/products/StockStatusBadge.tsx">
+import type { Product } from '../../types/product'
+import { isLowStock } from '../../utils/stock'
+
+type StockStatusBadgeProps = Pick<Product, 'currentStock' | 'minStockLevel'>
+
+function StockStatusBadge({
+  currentStock,
+  minStockLevel,
+}: StockStatusBadgeProps) {
+  if (isLowStock({ currentStock, minStockLevel })) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#dc3545] px-[9px] py-[3px] text-[11px] font-semibold leading-[17px] tracking-[0.3px] text-white">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 3 2 20h20L12 3z" />
+          <path d="M12 10v4" />
+          <path d="M12 17h.01" />
+        </svg>
+        Low Stock
+      </span>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#d1e7dd] px-[9px] py-[3px] text-[11px] font-semibold leading-[17px] tracking-[0.3px] text-[#0a3622]">
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="m5 12 5 5 9-10" />
+      </svg>
+      In Stock
+    </span>
+  )
+}
+
+export default StockStatusBadge
 </file>
 
 <file path="frontend/react-app/src/components/SearchBar.tsx">
@@ -4351,6 +4124,27 @@ const closeButtonStyle: CSSProperties = {
 export default StaffManagement
 </file>
 
+<file path="frontend/react-app/src/types/product.ts">
+export interface Product {
+  id: number
+  name: string
+  categoryName: string
+  price: number
+  currentStock: number
+  minStockLevel: number
+  unit?: string // wireframe shows kg / L / pcs
+}
+</file>
+
+<file path="frontend/react-app/src/utils/stock.ts">
+import type { Product } from '../types/product'
+
+// Low-stock rule lives here only (SRS BR-08: stock <= min).
+export const isLowStock = (
+  product: Pick<Product, 'currentStock' | 'minStockLevel'>,
+) => product.currentStock <= product.minStockLevel
+</file>
+
 <file path="frontend/react-app/src/App.css">
 .counter {
   font-size: 16px;
@@ -5455,60 +5249,821 @@ app.listen(PORT, () => {
 });
 </file>
 
-<file path="frontend/react-app/src/components/products/StockStatusBadge.tsx">
-import type { Product } from '../../types/product'
-import { isLowStock } from '../../utils/stock'
-
-type StockStatusBadgeProps = Pick<Product, 'currentStock' | 'minStockLevel'>
-
-function StockStatusBadge({
-  currentStock,
-  minStockLevel,
-}: StockStatusBadgeProps) {
-  if (isLowStock({ currentStock, minStockLevel })) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#dc3545] px-[9px] py-[3px] text-[11px] font-semibold leading-[17px] tracking-[0.3px] text-white">
-        <svg
-          width="10"
-          height="10"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M12 3 2 20h20L12 3z" />
-          <path d="M12 10v4" />
-          <path d="M12 17h.01" />
-        </svg>
-        Low Stock
-      </span>
-    )
+<file path="backend/package.json">
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "GroceryTrack backend API",
+  "main": "dist/app.js",
+  "scripts": {
+    "dev": "tsx watch src/app.ts",
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.24.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   }
+}
+</file>
+
+<file path="frontend/react-app/src/components/products/CategoryDropdown.tsx">
+import { useEffect } from 'react'
+import { useCategories } from '../../context/CategoryContext'
+
+interface CategoryDropdownProps {
+  id: string
+  value: string
+  onChange: (category: string) => void
+  required?: boolean
+}
+
+function CategoryDropdown({
+  id,
+  value,
+  onChange,
+  required = true,
+}: CategoryDropdownProps) {
+  const { categories, categoryError, refreshCategories } = useCategories()
+
+  // Reload the category list every time the form opens
+  useEffect(() => {
+    void refreshCategories()
+  }, [refreshCategories])
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-[4px] bg-[#d1e7dd] px-[9px] py-[3px] text-[11px] font-semibold leading-[17px] tracking-[0.3px] text-[#0a3622]">
-      <svg
-        width="10"
-        height="10"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
+    <div className="product-form-field">
+      <label htmlFor={id}>Category {required && '*'}</label>
+
+      <select
+        id={id}
+        name="category"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
       >
-        <path d="m5 12 5 5 9-10" />
-      </svg>
-      In Stock
-    </span>
+        <option value="">Select category</option>
+
+        {categories.map((category) => (
+          <option key={category} value={category}>
+            {category}
+          </option>
+        ))}
+      </select>
+
+      {categoryError && (
+        <p style={{ margin: 0, color: '#dc3545', fontSize: '11px' }}>
+          {categoryError}
+        </p>
+      )}
+    </div>
   )
 }
 
-export default StockStatusBadge
+export default CategoryDropdown
+</file>
+
+<file path="frontend/react-app/src/components/products/ProductCatalogView.tsx">
+import type { ReactNode } from 'react'
+import type { Product } from '../../types/product'
+import { isLowStock } from '../../utils/stock'
+import { formatPrice } from '../../utils/currency'
+import StockStatusBadge from './StockStatusBadge'
+
+type ProductCatalogViewProps = {
+  products: Product[]
+  totalCount?: number // for "Showing X of Y" when search filters the list
+  lowStockCount?: number // counted from ALL products, not the filtered list
+  toolbar?: ReactNode // search bar slot (FE 4)
+  emptyMessage?: string // e.g. "No products match your search."
+  onAdd: () => void
+  onAddCategory?: () => void
+  onEdit: (product: Product) => void
+  onDelete: (product: Product) => void
+}
+
+const formatQty = (qty: number, unit?: string) =>
+  unit ? `${qty} ${unit}` : `${qty}`
+
+const pluralize = (count: number, word: string) =>
+  `${count} ${word}${count === 1 ? '' : 's'}`
+
+function ProductCatalogView({
+  products,
+  totalCount,
+  lowStockCount: lowCount,
+  toolbar,
+  emptyMessage = 'No products to display.',
+  onAdd,
+  onAddCategory,
+  onEdit,
+  onDelete,
+}: ProductCatalogViewProps) {
+  const total = totalCount ?? products.length
+  const lowStockCount = lowCount ?? products.filter(isLowStock).length
+
+  return (
+    <div>
+            {/* Heading row */}
+      <div className="mb-[18px] flex items-start justify-between">
+        <div>
+          <h2 className="text-[18px] font-bold text-[#212529]">
+            Product Inventory
+          </h2>
+
+          <p className="mt-1 text-[12px] text-[#adb5bd]">
+            {pluralize(total, 'total product')} ·{' '}
+            <span className="text-[#dc3545]">
+              {pluralize(lowStockCount, 'low-stock alert')}
+            </span>
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {onAddCategory && (
+            <button
+              type="button"
+              onClick={onAddCategory}
+              className="inline-flex h-[39px] shrink-0 items-center justify-center gap-[7px] rounded-[7px] bg-[#0d6efd] px-[18px] py-[9px] text-[13px] font-semibold text-white transition hover:bg-[#0b5ed7]"
+            >
+              + Add Category
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onAdd}
+            className="inline-flex h-[39px] w-[176px] shrink-0 items-center justify-center gap-[7px] rounded-[7px] bg-[#0d6efd] px-[18px] py-[9px] text-[13px] font-semibold text-white transition hover:bg-[#0b5ed7]"
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+            Add New Product
+          </button>
+        </div>
+      </div>
+      {/* Search bar slot */}
+      {toolbar && <div className="mb-[18px]">{toolbar}</div>}
+
+      {/* Table card */}
+      <section className="overflow-hidden rounded-[10px] border border-[#e9ecef] bg-white">
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse text-left text-[13px] text-[#495057]">
+            <thead className="bg-[#f8f9fa] text-[11px] font-semibold uppercase text-[#adb5bd]">
+              <tr>
+                <th scope="col" className="px-4 py-[11px]">#</th>
+                <th scope="col" className="px-4 py-[11px]">Product Name</th>
+                <th scope="col" className="px-4 py-[11px]">Category</th>
+                <th scope="col" className="px-4 py-[11px]">Price</th>
+                <th scope="col" className="px-4 py-[11px]">Current Stock</th>
+                <th scope="col" className="px-4 py-[11px]">Min Stock Level</th>
+                <th scope="col" className="px-4 py-[11px]">Status</th>
+                <th scope="col" className="px-4 py-[11px]">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody className="whitespace-nowrap">
+              {products.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-4 py-10 text-center text-[#adb5bd]"
+                  >
+                    {emptyMessage}
+                  </td>
+                </tr>
+              ) : (
+                products.map((product, index) => {
+                  const low = isLowStock(product)
+
+                  return (
+                    <tr
+                      key={product.id}
+                      className={`border-b border-[#f8f9fa] last:border-b-0 ${
+                        low
+                          ? 'bg-[#fff8f8] hover:bg-[#ffeaea]'
+                          : 'bg-white hover:bg-[#f1f3f5]'
+                      }`}
+                    >
+                      <td className="px-4 py-[11px] text-[#adb5bd]">
+                        {index + 1}
+                      </td>
+
+                      <td className="px-4 py-[11px] font-medium text-[#343a40]">
+                        {product.name}
+                      </td>
+
+                      <td className="px-4 py-[11px]">
+                        <span className="inline-block rounded-[4px] bg-[#e9ecef] px-2 py-[0.6px] text-[12px] font-normal leading-[18px] text-[#495057]">
+                          {product.categoryName}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-[11px] font-semibold text-[#343a40]">
+                        {formatPrice(product.price)}
+                      </td>
+
+                      <td
+                        className={`px-4 py-[11px] font-bold ${
+                          low ? 'text-[#dc3545]' : 'text-[#343a40]'
+                        }`}
+                      >
+                        {formatQty(product.currentStock, product.unit)}
+                      </td>
+
+                      <td className="px-4 py-[11px]">
+                        {formatQty(product.minStockLevel, product.unit)}
+                      </td>
+
+                      <td className="px-4 py-[11px]">
+                        <StockStatusBadge
+                          currentStock={product.currentStock}
+                          minStockLevel={product.minStockLevel}
+                        />
+                      </td>
+
+                      <td className="px-4 py-[11px]">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => onEdit(product)}
+                            aria-label={`Edit ${product.name}`}
+                            className="inline-flex h-[29.6px] items-center gap-1 rounded-[5px] border border-[#ffda6a] bg-[#fff3cd] px-3 text-[12px] font-medium leading-[18px] text-[#664d03] transition hover:bg-[#ffecb5]"
+                          >
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" />
+                              <path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L11 15.6 7 16.6l1-4z" />
+                            </svg>
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => onDelete(product)}
+                            aria-label={`Delete ${product.name}`}
+                            className="inline-flex h-[29.6px] items-center gap-1 rounded-[5px] border border-[#f5c6cb] bg-[#f8d7da] px-3 text-[12px] font-medium leading-[18px] text-[#842029] transition hover:bg-[#f5c2c7]"
+                          >
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6" />
+                              <path d="M14 11v6" />
+                            </svg>
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="border-t border-[#e9ecef] px-4 py-[11px] text-[12px] text-[#adb5bd]">
+          Showing {products.length} of {pluralize(total, 'product')}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+export default ProductCatalogView
+</file>
+
+<file path="frontend/react-app/src/context/CategoryContext.tsx">
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+
+const API_URL = 'http://localhost:3000/api'
+
+export interface CategoryItem {
+  id: number
+  name: string
+}
+
+interface CategoryContextType {
+  categories: string[]
+  categoryError: string
+  categoryItems: CategoryItem[]
+  refreshCategories: () => Promise<void>
+}
+
+const CategoryContext = createContext<CategoryContextType | undefined>(
+  undefined,
+)
+
+export function CategoryProvider({
+  children,
+}: {
+  children: ReactNode
+}) {
+  const [categoryItems, setCategoryItems] = useState<CategoryItem[]>([])
+  const [categoryError, setCategoryError] = useState('')
+
+  const refreshCategories = useCallback(async () => {
+    const token = localStorage.getItem('token')
+
+    if (!token) {
+      setCategoryError('You are not logged in. Please log in again.')
+      return
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/categories`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+
+        setCategoryError(
+          `Could not load categories (HTTP ${response.status}): ${
+            body.error || body.message || 'Unknown error'
+          }`,
+        )
+        return
+      }
+
+      const data: CategoryItem[] = await response.json()
+
+      setCategoryError('')
+
+      // Oldest first, so new categories appear at the bottom of the list
+      setCategoryItems(
+        [...data]
+          .sort((a, b) => a.id - b.id)
+          .map((item) => ({ id: item.id, name: item.name })),
+      )
+    } catch (error) {
+      console.error('Failed to load categories:', error)
+      setCategoryError(
+        'Cannot reach the server (http://localhost:3000). Is the backend running?',
+      )
+    }
+  }, [])
+
+  const categories = useMemo(
+    () => categoryItems.map((item) => item.name),
+    [categoryItems],
+  )
+
+  return (
+    <CategoryContext.Provider
+      value={{ categories, categoryError, categoryItems, refreshCategories }}
+    >
+      {children}
+    </CategoryContext.Provider>
+  )
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function useCategories() {
+  const context = useContext(CategoryContext)
+
+  if (!context) {
+    throw new Error(
+      'useCategories must be used inside CategoryProvider',
+    )
+  }
+
+  return context
+}
+</file>
+
+<file path="frontend/react-app/src/pages/CategoryManagement.tsx">
+import { useEffect, useState } from 'react'
+import { useCategories } from '../context/CategoryContext'
+
+const API_URL = 'http://localhost:3000/api'
+
+async function request(path: string, options: RequestInit = {}) {
+  const token = localStorage.getItem('token')
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Request failed')
+  }
+
+  return data
+}
+
+function CategoryManagement() {
+  // Shared category data
+  const { categories, categoryItems, refreshCategories } = useCategories()
+  // Add Category state
+  const [newCategory, setNewCategory] = useState('')
+  const [error, setError] = useState('')
+
+  // Edit Category state
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editedName, setEditedName] = useState('')
+  const [editError, setEditError] = useState('')
+
+  // Delete Category state
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null)
+
+  // Load categories from the backend
+  useEffect(() => {
+    void refreshCategories()
+  }, [refreshCategories])
+
+  // Add a category
+  const handleAddCategory = async () => {
+    const categoryName = newCategory.trim()
+
+    if (!categoryName) {
+      setError('Category name is required.')
+      return
+    }
+
+    const alreadyExists = categories.some(
+      (category) =>
+        category.toLowerCase() === categoryName.toLowerCase()
+    )
+
+    if (alreadyExists) {
+      setError('This category already exists.')
+      return
+    }
+
+    try {
+      await request('/categories', {
+        method: 'POST',
+        body: JSON.stringify({ name: categoryName }),
+      })
+
+      await refreshCategories()
+      setNewCategory('')
+      setError('')
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Could not add the category.',
+      )
+    }
+  }
+
+  // Start editing a category
+  const handleEditClick = (index: number) => {
+    setEditingIndex(index)
+    setEditedName(categories[index])
+    setEditError('')
+  }
+
+  // Save the edited category
+  const handleSaveEdit = async () => {
+    if (editingIndex === null) return
+
+    const categoryName = editedName.trim()
+
+    if (!categoryName) {
+      setEditError('Category name is required.')
+      return
+    }
+
+    const alreadyExists = categories.some(
+      (category, index) =>
+        index !== editingIndex &&
+        category.toLowerCase() === categoryName.toLowerCase()
+    )
+
+    if (alreadyExists) {
+      setEditError('This category already exists.')
+      return
+    }
+
+    const categoryItem = categoryItems[editingIndex]
+
+    if (!categoryItem) return
+
+    try {
+      await request(`/categories/${categoryItem.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: categoryName }),
+      })
+
+      await refreshCategories()
+      setEditingIndex(null)
+      setEditedName('')
+      setEditError('')
+    } catch (err) {
+      setEditError(
+        err instanceof Error ? err.message : 'Could not update the category.',
+      )
+    }
+  }
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setEditingIndex(null)
+    setEditedName('')
+    setEditError('')
+  }
+
+  // Open delete confirmation
+  const handleDeleteClick = (index: number) => {
+    setDeletingIndex(index)
+  }
+
+  // Confirm deletion
+  const handleConfirmDelete = async () => {
+    if (deletingIndex === null) return
+
+    const categoryItem = categoryItems[deletingIndex]
+
+    if (categoryItem) {
+      try {
+        await request(`/categories/${categoryItem.id}`, {
+          method: 'DELETE',
+        })
+
+        await refreshCategories()
+      } catch (err) {
+        window.alert(
+          err instanceof Error ? err.message : 'Could not delete the category.',
+        )
+      }
+    }
+
+    setDeletingIndex(null)
+
+    // Reset editing
+    setEditingIndex(null)
+    setEditedName('')
+    setEditError('')
+  }
+
+  // Cancel deletion
+  const handleCancelDelete = () => {
+    setDeletingIndex(null)
+  }
+
+    return (
+    <div className="space-y-6">
+
+      {/* Page Heading */}
+      <div>
+        <h1 className="text-xl font-bold text-[#212529]">
+          Category Management
+        </h1>
+
+        <p className="mt-1 text-sm text-[#6c757d]">
+          View and manage your product categories.
+        </p>
+      </div>
+
+      {/* Add Category Card */}
+      <div className="rounded-lg border border-[#e9ecef] bg-white p-6">
+
+        <h2 className="mb-4 text-base font-semibold text-[#212529]">
+          Add New Category
+        </h2>
+
+        <div className="flex gap-3">
+          <input
+            type="text"
+            placeholder="Enter category name"
+            aria-label="New category name"
+            value={newCategory}
+            onChange={(e) => {
+              setNewCategory(e.target.value)
+              setError('')
+            }}
+            className="flex-1 rounded-md border border-[#ced4da] px-3 py-2 text-sm outline-none focus:border-[#0d6efd]"
+          />
+
+          <button
+            type="button"
+            onClick={handleAddCategory}
+            className="rounded-md bg-[#0d6efd] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0b5ed7]"
+          >
+            + Add Category
+          </button>
+        </div>
+
+        {error && (
+          <p className="mt-2 text-sm text-[#dc3545]">
+            {error}
+          </p>
+        )}
+      </div>
+
+      {/* Category List Card */}
+      <div className="rounded-lg border border-[#e9ecef] bg-white p-6">
+
+        <h2 className="mb-4 text-base font-semibold text-[#212529]">
+          Product Categories ({categories.length})
+        </h2>
+
+        <div className="divide-y divide-[#e9ecef]">
+
+          {categories.map((category, index) => (
+            <div key={index} className="py-3">
+
+              {editingIndex === index ? (
+
+                /* Edit Mode */
+                <div>
+                  <div className="flex items-center gap-3">
+
+                    <input
+                      type="text"
+                      value={editedName}
+                      aria-label={`Edit ${category}`}
+                      onChange={(e) => {
+                        setEditedName(e.target.value)
+                        setEditError('')
+                      }}
+                      className="flex-1 rounded-md border border-[#ced4da] px-3 py-2 text-sm outline-none focus:border-[#0d6efd]"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={handleSaveEdit}
+                      className="rounded-md bg-[#198754] px-4 py-2 text-sm font-semibold text-white hover:bg-[#157347]"
+                    >
+                      Save
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCancelEdit}
+                      className="rounded-md border border-[#ced4da] px-4 py-2 text-sm text-[#495057] hover:bg-[#f8f9fa]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  {editError && (
+                    <p className="mt-2 text-sm text-[#dc3545]">
+                      {editError}
+                    </p>
+                  )}
+                </div>
+
+              ) : (
+
+                /* Normal List Mode */
+                <div className="flex items-center justify-between">
+
+                  <span className="text-sm text-[#343a40]">
+                    {category}
+                  </span>
+
+                  <div className="flex items-center gap-2">
+
+                    <button
+                      type="button"
+                      onClick={() => handleEditClick(index)}
+                      className="rounded-md border border-[#ced4da] px-4 py-2 text-sm text-[#495057] hover:bg-[#f8f9fa]"
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteClick(index)}
+                      className="rounded-md border border-[#dc3545] px-4 py-2 text-sm text-[#dc3545] hover:bg-[#fff5f5]"
+                    >
+                      Delete
+                    </button>
+
+                  </div>
+                </div>
+              )}
+
+            </div>
+          ))}
+
+        </div>
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      {deletingIndex !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-category-title"
+            aria-describedby="delete-category-description"
+            className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+          >
+
+            <h2
+              id="delete-category-title"
+              className="text-lg font-bold text-[#212529]"
+            >
+              Delete Category?
+            </h2>
+
+            <p
+              id="delete-category-description"
+              className="mt-3 text-sm text-[#6c757d]"
+            >
+              Are you sure you want to delete{' '}
+              <span className="font-semibold text-[#212529]">
+                {categories[deletingIndex]}
+              </span>
+              ?
+            </p>
+
+            <p className="mt-2 text-sm text-[#dc3545]">
+              This action cannot be undone.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+
+              <button
+                type="button"
+                onClick={handleCancelDelete}
+                className="rounded-md border border-[#ced4da] px-4 py-2 text-sm text-[#495057] hover:bg-[#f8f9fa]"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="rounded-md bg-[#dc3545] px-4 py-2 text-sm font-semibold text-white hover:bg-[#bb2d3b]"
+              >
+                Yes, Delete
+              </button>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
+export default CategoryManagement
 </file>
 
 <file path="frontend/react-app/src/pages/Login.tsx">
@@ -5697,27 +6252,6 @@ function Login() {
 }
 
 export default Login;
-</file>
-
-<file path="frontend/react-app/src/types/product.ts">
-export interface Product {
-  id: number
-  name: string
-  categoryName: string
-  price: number
-  currentStock: number
-  minStockLevel: number
-  unit?: string // wireframe shows kg / L / pcs
-}
-</file>
-
-<file path="frontend/react-app/src/utils/stock.ts">
-import type { Product } from '../types/product'
-
-// Low-stock rule lives here only (SRS BR-08: stock <= min).
-export const isLowStock = (
-  product: Pick<Product, 'currentStock' | 'minStockLevel'>,
-) => product.currentStock <= product.minStockLevel
 </file>
 
 <file path="frontend/react-app/src/index.css">
@@ -5912,6 +6446,25 @@ body {
 }
 </file>
 
+<file path="frontend/react-app/src/main.tsx">
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
+import { CategoryProvider } from './context/CategoryContext'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <CategoryProvider>
+        <App />
+      </CategoryProvider>
+    </BrowserRouter>
+  </StrictMode>,
+)
+</file>
+
 <file path="frontend/react-app/.gitignore">
 # Logs
 logs
@@ -5974,96 +6527,6 @@ dist-ssr
     "vite": "^8.3.0"
   }
 }
-</file>
-
-<file path="backend/package.json">
-{
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "GroceryTrack backend API",
-  "main": "dist/app.js",
-  "scripts": {
-    "dev": "tsx watch src/app.ts",
-    "build": "tsc",
-    "start": "node dist/app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "bcryptjs": "^3.0.3",
-    "cors": "^2.8.6",
-    "dotenv": "^18.0.3",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "mysql2": "^3.24.4"
-  },
-  "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^24.10.1",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
-  }
-}
-</file>
-
-<file path="frontend/react-app/src/components/products/CategoryDropdown.tsx">
-import { useEffect } from 'react'
-import { useCategories } from '../../context/CategoryContext'
-
-interface CategoryDropdownProps {
-  id: string
-  value: string
-  onChange: (category: string) => void
-  required?: boolean
-}
-
-function CategoryDropdown({
-  id,
-  value,
-  onChange,
-  required = true,
-}: CategoryDropdownProps) {
-  const { categories, categoryError, refreshCategories } = useCategories()
-
-  // Reload the category list every time the form opens
-  useEffect(() => {
-    void refreshCategories()
-  }, [refreshCategories])
-
-  return (
-    <div className="product-form-field">
-      <label htmlFor={id}>Category {required && '*'}</label>
-
-      <select
-        id={id}
-        name="category"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        required={required}
-      >
-        <option value="">Select category</option>
-
-        {categories.map((category) => (
-          <option key={category} value={category}>
-            {category}
-          </option>
-        ))}
-      </select>
-
-      {categoryError && (
-        <p style={{ margin: 0, color: '#dc3545', fontSize: '11px' }}>
-          {categoryError}
-        </p>
-      )}
-    </div>
-  )
-}
-
-export default CategoryDropdown
 </file>
 
 <file path="frontend/react-app/src/components/products/DeleteConfirmationDialog.tsx">
@@ -6198,234 +6661,6 @@ function DeleteConfirmationDialog({
 }
 
 export default DeleteConfirmationDialog
-</file>
-
-<file path="frontend/react-app/src/components/products/ProductCatalogView.tsx">
-import type { ReactNode } from 'react'
-import type { Product } from '../../types/product'
-import { isLowStock } from '../../utils/stock'
-import { formatPrice } from '../../utils/currency'
-import StockStatusBadge from './StockStatusBadge'
-
-type ProductCatalogViewProps = {
-  products: Product[]
-  totalCount?: number // for "Showing X of Y" when search filters the list
-  lowStockCount?: number // counted from ALL products, not the filtered list
-  toolbar?: ReactNode // search bar slot (FE 4)
-  emptyMessage?: string // e.g. "No products match your search."
-  onAdd: () => void
-  onEdit: (product: Product) => void
-  onDelete: (product: Product) => void
-}
-
-const formatQty = (qty: number, unit?: string) =>
-  unit ? `${qty} ${unit}` : `${qty}`
-
-const pluralize = (count: number, word: string) =>
-  `${count} ${word}${count === 1 ? '' : 's'}`
-
-function ProductCatalogView({
-  products,
-  totalCount,
-  lowStockCount: lowCount,
-  toolbar,
-  emptyMessage = 'No products to display.',
-  onAdd,
-  onEdit,
-  onDelete,
-}: ProductCatalogViewProps) {
-  const total = totalCount ?? products.length
-  const lowStockCount = lowCount ?? products.filter(isLowStock).length
-
-  return (
-    <div>
-      {/* Heading row */}
-      <div className="mb-[18px] flex items-start justify-between">
-        <div>
-          <h2 className="text-[18px] font-bold text-[#212529]">
-            Product Inventory
-          </h2>
-
-          <p className="mt-1 text-[12px] text-[#adb5bd]">
-            {pluralize(total, 'total product')} ·{' '}
-            <span className="text-[#dc3545]">
-              {pluralize(lowStockCount, 'low-stock alert')}
-            </span>
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={onAdd}
-          className="inline-flex h-[39px] w-[176px] shrink-0 items-center justify-center gap-[7px] rounded-[7px] bg-[#0d6efd] px-[18px] py-[9px] text-[13px] font-semibold text-white transition hover:bg-[#0b5ed7]"
-        >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M12 5v14" />
-            <path d="M5 12h14" />
-          </svg>
-          Add New Product
-        </button>
-      </div>
-
-      {/* Search bar slot */}
-      {toolbar && <div className="mb-[18px]">{toolbar}</div>}
-
-      {/* Table card */}
-      <section className="overflow-hidden rounded-[10px] border border-[#e9ecef] bg-white">
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse text-left text-[13px] text-[#495057]">
-            <thead className="bg-[#f8f9fa] text-[11px] font-semibold uppercase text-[#adb5bd]">
-              <tr>
-                <th scope="col" className="px-4 py-[11px]">#</th>
-                <th scope="col" className="px-4 py-[11px]">Product Name</th>
-                <th scope="col" className="px-4 py-[11px]">Category</th>
-                <th scope="col" className="px-4 py-[11px]">Price</th>
-                <th scope="col" className="px-4 py-[11px]">Current Stock</th>
-                <th scope="col" className="px-4 py-[11px]">Min Stock Level</th>
-                <th scope="col" className="px-4 py-[11px]">Status</th>
-                <th scope="col" className="px-4 py-[11px]">Actions</th>
-              </tr>
-            </thead>
-
-            <tbody className="whitespace-nowrap">
-              {products.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-10 text-center text-[#adb5bd]"
-                  >
-                    {emptyMessage}
-                  </td>
-                </tr>
-              ) : (
-                products.map((product, index) => {
-                  const low = isLowStock(product)
-
-                  return (
-                    <tr
-                      key={product.id}
-                      className={`border-b border-[#f8f9fa] last:border-b-0 ${
-                        low
-                          ? 'bg-[#fff8f8] hover:bg-[#ffeaea]'
-                          : 'bg-white hover:bg-[#f1f3f5]'
-                      }`}
-                    >
-                      <td className="px-4 py-[11px] text-[#adb5bd]">
-                        {index + 1}
-                      </td>
-
-                      <td className="px-4 py-[11px] font-medium text-[#343a40]">
-                        {product.name}
-                      </td>
-
-                      <td className="px-4 py-[11px]">
-                        <span className="inline-block rounded-[4px] bg-[#e9ecef] px-2 py-[0.6px] text-[12px] font-normal leading-[18px] text-[#495057]">
-                          {product.categoryName}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-[11px] font-semibold text-[#343a40]">
-                        {formatPrice(product.price)}
-                      </td>
-
-                      <td
-                        className={`px-4 py-[11px] font-bold ${
-                          low ? 'text-[#dc3545]' : 'text-[#343a40]'
-                        }`}
-                      >
-                        {formatQty(product.currentStock, product.unit)}
-                      </td>
-
-                      <td className="px-4 py-[11px]">
-                        {formatQty(product.minStockLevel, product.unit)}
-                      </td>
-
-                      <td className="px-4 py-[11px]">
-                        <StockStatusBadge
-                          currentStock={product.currentStock}
-                          minStockLevel={product.minStockLevel}
-                        />
-                      </td>
-
-                      <td className="px-4 py-[11px]">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => onEdit(product)}
-                            aria-label={`Edit ${product.name}`}
-                            className="inline-flex h-[29.6px] items-center gap-1 rounded-[5px] border border-[#ffda6a] bg-[#fff3cd] px-3 text-[12px] font-medium leading-[18px] text-[#664d03] transition hover:bg-[#ffecb5]"
-                          >
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                            >
-                              <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" />
-                              <path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L11 15.6 7 16.6l1-4z" />
-                            </svg>
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => onDelete(product)}
-                            aria-label={`Delete ${product.name}`}
-                            className="inline-flex h-[29.6px] items-center gap-1 rounded-[5px] border border-[#f5c6cb] bg-[#f8d7da] px-3 text-[12px] font-medium leading-[18px] text-[#842029] transition hover:bg-[#f5c2c7]"
-                          >
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.8"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                            >
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4h8v2" />
-                              <path d="M19 6l-1 14H6L5 6" />
-                              <path d="M10 11v6" />
-                              <path d="M14 11v6" />
-                            </svg>
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="border-t border-[#e9ecef] px-4 py-[11px] text-[12px] text-[#adb5bd]">
-          Showing {products.length} of {pluralize(total, 'product')}
-        </div>
-      </section>
-    </div>
-  )
-}
-
-export default ProductCatalogView
 </file>
 
 <file path="frontend/react-app/src/components/products/ProductForm.tsx">
@@ -7566,492 +7801,6 @@ function EyeOffIcon() {
 }
 </file>
 
-<file path="frontend/react-app/src/context/CategoryContext.tsx">
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
-
-const API_URL = 'http://localhost:3000/api'
-
-export interface CategoryItem {
-  id: number
-  name: string
-}
-
-interface CategoryContextType {
-  categories: string[]
-  categoryError: string
-  categoryItems: CategoryItem[]
-  refreshCategories: () => Promise<void>
-}
-
-const CategoryContext = createContext<CategoryContextType | undefined>(
-  undefined,
-)
-
-export function CategoryProvider({
-  children,
-}: {
-  children: ReactNode
-}) {
-  const [categoryItems, setCategoryItems] = useState<CategoryItem[]>([])
-  const [categoryError, setCategoryError] = useState('')
-
-  const refreshCategories = useCallback(async () => {
-    const token = localStorage.getItem('token')
-
-    if (!token) {
-      setCategoryError('You are not logged in. Please log in again.')
-      return
-    }
-
-    try {
-      const response = await fetch(`${API_URL}/categories`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}))
-
-        setCategoryError(
-          `Could not load categories (HTTP ${response.status}): ${
-            body.error || body.message || 'Unknown error'
-          }`,
-        )
-        return
-      }
-
-      const data: CategoryItem[] = await response.json()
-
-      setCategoryError('')
-
-      // Oldest first, so new categories appear at the bottom of the list
-      setCategoryItems(
-        [...data]
-          .sort((a, b) => a.id - b.id)
-          .map((item) => ({ id: item.id, name: item.name })),
-      )
-    } catch (error) {
-      console.error('Failed to load categories:', error)
-      setCategoryError(
-        'Cannot reach the server (http://localhost:3000). Is the backend running?',
-      )
-    }
-  }, [])
-
-  const categories = useMemo(
-    () => categoryItems.map((item) => item.name),
-    [categoryItems],
-  )
-
-  return (
-    <CategoryContext.Provider
-      value={{ categories, categoryError, categoryItems, refreshCategories }}
-    >
-      {children}
-    </CategoryContext.Provider>
-  )
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useCategories() {
-  const context = useContext(CategoryContext)
-
-  if (!context) {
-    throw new Error(
-      'useCategories must be used inside CategoryProvider',
-    )
-  }
-
-  return context
-}
-</file>
-
-<file path="frontend/react-app/src/pages/CategoryManagement.tsx">
-import { useEffect, useState } from 'react'
-import { useCategories } from '../context/CategoryContext'
-
-const API_URL = 'http://localhost:3000/api'
-
-async function request(path: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token')
-
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-  })
-
-  const data = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(data.message || 'Request failed')
-  }
-
-  return data
-}
-
-function CategoryManagement() {
-  // Shared category data
-  const { categories, categoryItems, refreshCategories } = useCategories()
-  // Add Category state
-  const [newCategory, setNewCategory] = useState('')
-  const [error, setError] = useState('')
-
-  // Edit Category state
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
-  const [editedName, setEditedName] = useState('')
-  const [editError, setEditError] = useState('')
-
-  // Delete Category state
-  const [deletingIndex, setDeletingIndex] = useState<number | null>(null)
-
-  // Load categories from the backend
-  useEffect(() => {
-    void refreshCategories()
-  }, [refreshCategories])
-
-  // Add a category
-  const handleAddCategory = async () => {
-    const categoryName = newCategory.trim()
-
-    if (!categoryName) {
-      setError('Category name is required.')
-      return
-    }
-
-    const alreadyExists = categories.some(
-      (category) =>
-        category.toLowerCase() === categoryName.toLowerCase()
-    )
-
-    if (alreadyExists) {
-      setError('This category already exists.')
-      return
-    }
-
-    try {
-      await request('/categories', {
-        method: 'POST',
-        body: JSON.stringify({ name: categoryName }),
-      })
-
-      await refreshCategories()
-      setNewCategory('')
-      setError('')
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Could not add the category.',
-      )
-    }
-  }
-
-  // Start editing a category
-  const handleEditClick = (index: number) => {
-    setEditingIndex(index)
-    setEditedName(categories[index])
-    setEditError('')
-  }
-
-  // Save the edited category
-  const handleSaveEdit = async () => {
-    if (editingIndex === null) return
-
-    const categoryName = editedName.trim()
-
-    if (!categoryName) {
-      setEditError('Category name is required.')
-      return
-    }
-
-    const alreadyExists = categories.some(
-      (category, index) =>
-        index !== editingIndex &&
-        category.toLowerCase() === categoryName.toLowerCase()
-    )
-
-    if (alreadyExists) {
-      setEditError('This category already exists.')
-      return
-    }
-
-    const categoryItem = categoryItems[editingIndex]
-
-    if (!categoryItem) return
-
-    try {
-      await request(`/categories/${categoryItem.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ name: categoryName }),
-      })
-
-      await refreshCategories()
-      setEditingIndex(null)
-      setEditedName('')
-      setEditError('')
-    } catch (err) {
-      setEditError(
-        err instanceof Error ? err.message : 'Could not update the category.',
-      )
-    }
-  }
-
-  // Cancel editing
-  const handleCancelEdit = () => {
-    setEditingIndex(null)
-    setEditedName('')
-    setEditError('')
-  }
-
-  // Open delete confirmation
-  const handleDeleteClick = (index: number) => {
-    setDeletingIndex(index)
-  }
-
-  // Confirm deletion
-  const handleConfirmDelete = async () => {
-    if (deletingIndex === null) return
-
-    const categoryItem = categoryItems[deletingIndex]
-
-    if (categoryItem) {
-      try {
-        await request(`/categories/${categoryItem.id}`, {
-          method: 'DELETE',
-        })
-
-        await refreshCategories()
-      } catch (err) {
-        window.alert(
-          err instanceof Error ? err.message : 'Could not delete the category.',
-        )
-      }
-    }
-
-    setDeletingIndex(null)
-
-    // Reset editing
-    setEditingIndex(null)
-    setEditedName('')
-    setEditError('')
-  }
-
-  // Cancel deletion
-  const handleCancelDelete = () => {
-    setDeletingIndex(null)
-  }
-
-    return (
-    <div className="space-y-6">
-
-      {/* Page Heading */}
-      <div>
-        <h1 className="text-xl font-bold text-[#212529]">
-          Category Management
-        </h1>
-
-        <p className="mt-1 text-sm text-[#6c757d]">
-          View and manage your product categories.
-        </p>
-      </div>
-
-      {/* Add Category Card */}
-      <div className="rounded-lg border border-[#e9ecef] bg-white p-6">
-
-        <h2 className="mb-4 text-base font-semibold text-[#212529]">
-          Add New Category
-        </h2>
-
-        <div className="flex gap-3">
-          <input
-            type="text"
-            placeholder="Enter category name"
-            aria-label="New category name"
-            value={newCategory}
-            onChange={(e) => {
-              setNewCategory(e.target.value)
-              setError('')
-            }}
-            className="flex-1 rounded-md border border-[#ced4da] px-3 py-2 text-sm outline-none focus:border-[#0d6efd]"
-          />
-
-          <button
-            type="button"
-            onClick={handleAddCategory}
-            className="rounded-md bg-[#0d6efd] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0b5ed7]"
-          >
-            + Add Category
-          </button>
-        </div>
-
-        {error && (
-          <p className="mt-2 text-sm text-[#dc3545]">
-            {error}
-          </p>
-        )}
-      </div>
-
-      {/* Category List Card */}
-      <div className="rounded-lg border border-[#e9ecef] bg-white p-6">
-
-        <h2 className="mb-4 text-base font-semibold text-[#212529]">
-          Product Categories ({categories.length})
-        </h2>
-
-        <div className="divide-y divide-[#e9ecef]">
-
-          {categories.map((category, index) => (
-            <div key={index} className="py-3">
-
-              {editingIndex === index ? (
-
-                /* Edit Mode */
-                <div>
-                  <div className="flex items-center gap-3">
-
-                    <input
-                      type="text"
-                      value={editedName}
-                      aria-label={`Edit ${category}`}
-                      onChange={(e) => {
-                        setEditedName(e.target.value)
-                        setEditError('')
-                      }}
-                      className="flex-1 rounded-md border border-[#ced4da] px-3 py-2 text-sm outline-none focus:border-[#0d6efd]"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={handleSaveEdit}
-                      className="rounded-md bg-[#198754] px-4 py-2 text-sm font-semibold text-white hover:bg-[#157347]"
-                    >
-                      Save
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      className="rounded-md border border-[#ced4da] px-4 py-2 text-sm text-[#495057] hover:bg-[#f8f9fa]"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-
-                  {editError && (
-                    <p className="mt-2 text-sm text-[#dc3545]">
-                      {editError}
-                    </p>
-                  )}
-                </div>
-
-              ) : (
-
-                /* Normal List Mode */
-                <div className="flex items-center justify-between">
-
-                  <span className="text-sm text-[#343a40]">
-                    {category}
-                  </span>
-
-                  <div className="flex items-center gap-2">
-
-                    <button
-                      type="button"
-                      onClick={() => handleEditClick(index)}
-                      className="rounded-md border border-[#ced4da] px-4 py-2 text-sm text-[#495057] hover:bg-[#f8f9fa]"
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteClick(index)}
-                      className="rounded-md border border-[#dc3545] px-4 py-2 text-sm text-[#dc3545] hover:bg-[#fff5f5]"
-                    >
-                      Delete
-                    </button>
-
-                  </div>
-                </div>
-              )}
-
-            </div>
-          ))}
-
-        </div>
-      </div>
-
-      {/* Delete Confirmation Dialog */}
-      {deletingIndex !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-
-          <div
-            role="alertdialog"
-            aria-modal="true"
-            aria-labelledby="delete-category-title"
-            aria-describedby="delete-category-description"
-            className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
-          >
-
-            <h2
-              id="delete-category-title"
-              className="text-lg font-bold text-[#212529]"
-            >
-              Delete Category?
-            </h2>
-
-            <p
-              id="delete-category-description"
-              className="mt-3 text-sm text-[#6c757d]"
-            >
-              Are you sure you want to delete{' '}
-              <span className="font-semibold text-[#212529]">
-                {categories[deletingIndex]}
-              </span>
-              ?
-            </p>
-
-            <p className="mt-2 text-sm text-[#dc3545]">
-              This action cannot be undone.
-            </p>
-
-            <div className="mt-6 flex justify-end gap-3">
-
-              <button
-                type="button"
-                onClick={handleCancelDelete}
-                className="rounded-md border border-[#ced4da] px-4 py-2 text-sm text-[#495057] hover:bg-[#f8f9fa]"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="rounded-md bg-[#dc3545] px-4 py-2 text-sm font-semibold text-white hover:bg-[#bb2d3b]"
-              >
-                Yes, Delete
-              </button>
-
-            </div>
-          </div>
-        </div>
-      )}
-
-    </div>
-  )
-}
-
-export default CategoryManagement
-</file>
-
 <file path="frontend/react-app/src/pages/ProductManagement.tsx">
 import { useCallback, useEffect, useRef, useState } from 'react'
 import ProductForm, {
@@ -8365,25 +8114,6 @@ function ProductManagement() {
 export default ProductManagement
 </file>
 
-<file path="frontend/react-app/src/main.tsx">
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import { CategoryProvider } from './context/CategoryContext'
-import './index.css'
-import App from './App.tsx'
-
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <BrowserRouter>
-      <CategoryProvider>
-        <App />
-      </CategoryProvider>
-    </BrowserRouter>
-  </StrictMode>,
-)
-</file>
-
 <file path="backend/src/routes/inventoryRoutes.ts">
 import express from "express";
 import db from "../config/db";
@@ -8406,6 +8136,7 @@ router.get("/low-stock/list", authenticateToken, async (req, res) => {
                 (p.minimum_stock - p.current_stock) AS shortage
             FROM products p
             WHERE p.current_stock <= p.minimum_stock
+                AND p.is_active = 1
             ORDER BY p.current_stock ASC
         `);
         res.json(products);
@@ -8434,6 +8165,7 @@ router.get("/", authenticateToken, async (req, res) => {
                 END AS stock_status
             FROM products p
             LEFT JOIN categories c ON p.category_id = c.category_id
+            WHERE p.is_active = 1 
             ORDER BY p.current_stock ASC
         `);
         res.json(inventory);
@@ -8567,12 +8299,312 @@ router.get("/low-stock/count", authenticateToken, async (req, res) => {
             SELECT COUNT(*) AS low_stock_count
             FROM products
             WHERE current_stock <= minimum_stock
+                AND is_active = 1
         `);
         res.json({ low_stock_count: rows[0].low_stock_count });
     } catch (error: any) {
         res.status(500).json({ message: "Failed to get low-stock count", error: error.message });
     }
 });
+
+export default router;
+</file>
+
+<file path="frontend/react-app/src/pages/ProductsPage.tsx">
+import { useCallback, useEffect, useState } from 'react'
+import ProductCatalogView from '../components/products/ProductCatalogView'
+import ProductForm, {
+  type ProductFormData,
+} from '../components/products/ProductForm'
+import DeleteConfirmationDialog from '../components/products/DeleteConfirmationDialog'
+import type { Product } from '../types/product'
+import SearchBar from '../components/SearchBar'
+import { useCategories } from '../context/CategoryContext'
+import { isLowStock } from '../utils/stock'
+import { useNavigate } from 'react-router-dom'
+
+const API_URL = 'http://localhost:3000/api'
+
+interface ApiProduct {
+  id: number
+  name: string
+  category: string | null
+  price: number | string
+  stock_quantity: number | string
+  minimum_stock: number | string
+}
+
+async function request(path: string, options: RequestInit = {}) {
+  const token = localStorage.getItem('token')
+
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(data.message || 'Request failed')
+  }
+
+  return data
+}
+
+function toProduct(item: ApiProduct): Product {
+  return {
+    id: item.id,
+    name: item.name,
+    categoryName: item.category ?? '',
+    price: Number(item.price),
+    currentStock: Number(item.stock_quantity),
+    minStockLevel: Number(item.minimum_stock),
+    unit: 'pcs', // The database does not store a unit yet
+  }
+}
+
+function ProductsPage() {
+  const navigate = useNavigate()
+  const { categories, categoryItems, refreshCategories } = useCategories()
+  const [products, setProducts] = useState<Product[]>([])
+  const [loadError, setLoadError] = useState('')
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('All')
+  const [showForm, setShowForm] = useState(false)
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null)
+
+  const loadProducts = useCallback(async () => {
+    const data: ApiProduct[] = await request('/products')
+    setProducts(data.map(toProduct))
+    setLoadError('')
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    request('/products')
+      .then((data: ApiProduct[]) => {
+        if (cancelled) return
+        setProducts(data.map(toProduct))
+        setLoadError('')
+      })
+      .catch((error) => {
+        if (cancelled) return
+        setLoadError(
+          error instanceof Error ? error.message : 'Could not load products.',
+        )
+      })
+
+    void refreshCategories()
+
+    return () => {
+      cancelled = true
+    }
+  }, [refreshCategories])
+
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name
+      .toLowerCase()
+      .includes(search.trim().toLowerCase())
+
+    const matchesCategory =
+      categoryFilter === 'All' || product.categoryName === categoryFilter
+
+    return matchesSearch && matchesCategory
+  })
+
+  const lowStockCount = products.filter(isLowStock).length
+
+  const emptyMessage = loadError
+    ? loadError
+    : products.length === 0
+      ? 'No products have been added yet.'
+      : 'No products match your search.'
+
+  function closeForm() {
+    setShowForm(false)
+    setEditingProduct(null)
+  }
+
+  async function handleSave(data: ProductFormData) {
+    const category = categoryItems.find((item) => item.name === data.category)
+
+    if (!category) {
+      throw new Error('Category not found')
+    }
+
+    if (editingProduct) {
+      // 1. Update the basic product details first
+      await request(`/products/${editingProduct.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: data.name,
+          category_id: category.id,
+          price: data.price,
+          minimum_stock: data.minimumStock,
+        }),
+      })
+
+      // 2. Check if stock was changed
+      if (data.currentStock !== editingProduct.currentStock) {
+        const difference = data.currentStock - editingProduct.currentStock;
+        
+        if (difference > 0) {
+          // If adding stock, use the RESTOCK API (this prevents the backend error)
+          await request(`/inventory/${editingProduct.id}/restock`, {
+            method: 'POST',
+            body: JSON.stringify({ quantity: difference }),
+          });
+        } else {
+          // If reducing stock, use the PUT API
+          await request(`/inventory/${editingProduct.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ quantity: data.currentStock }),
+          });
+        }
+      }
+    } else {
+      await request('/products', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: data.name,
+          category_id: category.id,
+          price: data.price,
+          stock_quantity: data.currentStock,
+          minimum_stock: data.minimumStock,
+        }),
+      })
+    }
+
+    await loadProducts()
+    closeForm()
+  }
+
+  async function handleConfirmDelete(productId: number) {
+    await request(`/products/${productId}`, { method: 'DELETE' })
+    await loadProducts()
+    setDeletingProduct(null)
+  }
+
+  return (
+    <div>
+      <ProductCatalogView
+        products={filteredProducts}
+        totalCount={products.length}
+        lowStockCount={lowStockCount}
+        emptyMessage={emptyMessage}
+        toolbar={
+          <div className="flex items-center gap-3 rounded-[10px] border border-[#e9ecef] bg-white p-3.5">
+            <div className="flex-1">
+              <SearchBar
+                value={search}
+                onChange={setSearch}
+                placeholder="Search products..."
+              />
+            </div>
+
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              aria-label="Filter by category"
+              className="h-[38px] w-[150px] shrink-0 cursor-pointer rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            >
+              <option value="All">All</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
+        onAddCategory={() => navigate('/categories')}
+        onAdd={() => {
+          setEditingProduct(null)
+          setShowForm(true)
+        }}
+        onEdit={(product) => {
+          setEditingProduct(product)
+          setShowForm(true)
+        }}
+        onDelete={(product) => setDeletingProduct(product)}
+      />
+
+      {showForm && (
+        <div
+          className="product-modal-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeForm()
+          }}
+        >
+          <ProductForm
+            key={editingProduct?.id ?? 'new-product'}
+            initialValues={
+              editingProduct
+                ? {
+                    name: editingProduct.name,
+                    category: editingProduct.categoryName,
+                    unit: editingProduct.unit ?? 'pcs',
+                    price: editingProduct.price,
+                    currentStock: editingProduct.currentStock,
+                    minimumStock: editingProduct.minStockLevel,
+                  }
+                : undefined
+            }
+            onSave={handleSave}
+            onCancel={closeForm}
+          />
+        </div>
+      )}
+
+      {deletingProduct && (
+        <DeleteConfirmationDialog
+          productName={deletingProduct.name}
+          onConfirm={() => handleConfirmDelete(deletingProduct.id)}
+          onCancel={() => setDeletingProduct(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+export default ProductsPage
+</file>
+
+<file path="backend/src/routes/productRoutes.ts">
+import express from "express";
+import { adminOnly, authenticateToken } from "../middleware/authMiddleware";
+import {
+    getProducts,
+    searchProducts,
+    getProductById,
+    createProduct,
+    updateProduct,
+    updateMinimumStock,
+    deleteProduct,
+    getTotalProductCount
+} from "../controllers/productController";
+
+const router = express.Router();
+
+router.get("/", authenticateToken, getProducts);
+router.get("/search/:name", authenticateToken, searchProducts);
+router.get("/count", authenticateToken, getTotalProductCount);
+router.get("/:id", authenticateToken, getProductById);
+router.post("/", authenticateToken, adminOnly, createProduct);
+router.put("/:id", authenticateToken, adminOnly, updateProduct);
+router.delete("/:id", authenticateToken, adminOnly, deleteProduct);
+
+router.patch(
+    "/:id/minimum-stock",
+    authenticateToken,
+    adminOnly,
+    updateMinimumStock
+);
 
 export default router;
 </file>
@@ -8642,17 +8674,7 @@ const navItems: NavItem[] = [
       </svg>
     ),
   },
-    {
-    to: '/low-stock',
-    label: 'Low-Stock Alerts',
-    icon: (
-      <svg {...iconProps}>
-        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-        <path d="M12 9v4" />
-        <path d="M12 17h.01" />
-      </svg>
-    ),
-  },
+  
   {
     to: '/staff',
     label: 'Staff Management',
@@ -8665,20 +8687,6 @@ const navItems: NavItem[] = [
       </svg>
     ),
   },
-
-      {
-    to: '/categories',
-    label: 'Category Management',
-
-    icon: (
-      <svg {...iconProps}>
-        <rect x="3" y="4" width="18" height="16" rx="2" />
-        <path d="M7 9h10" />
-        <path d="M7 14h7" />
-      </svg>
-    ),
-  },
-
 ]
 
 const pageTitles: Record<string, string> = {
@@ -8688,7 +8696,6 @@ const pageTitles: Record<string, string> = {
   '/staff': 'Staff Management',
   '/products': 'Product Management',
   '/categories': 'Category Management',
-    '/low-stock': 'Low-Stock Alerts',
 }
 
 function AppShell() {
@@ -8788,14 +8795,7 @@ function AppShell() {
           </div>
 
           <nav className="space-y-2">
-                        {navItems
-              .filter((item) => {
-                if (item.to === '/categories') {
-                  return currentUser?.role?.toLowerCase() === 'admin'
-                }
-                return true
-              })
-              .map((item) => (
+                {navItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -8983,40 +8983,6 @@ function AppShell() {
 export default AppShell
 </file>
 
-<file path="backend/src/routes/productRoutes.ts">
-import express from "express";
-import { adminOnly, authenticateToken } from "../middleware/authMiddleware";
-import {
-    getProducts,
-    searchProducts,
-    getProductById,
-    createProduct,
-    updateProduct,
-    updateMinimumStock,
-    deleteProduct,
-    getTotalProductCount
-} from "../controllers/productController";
-
-const router = express.Router();
-
-router.get("/", authenticateToken, getProducts);
-router.get("/search/:name", authenticateToken, searchProducts);
-router.get("/count", authenticateToken, getTotalProductCount);
-router.get("/:id", authenticateToken, getProductById);
-router.post("/", authenticateToken, adminOnly, createProduct);
-router.put("/:id", authenticateToken, adminOnly, updateProduct);
-router.delete("/:id", authenticateToken, adminOnly, deleteProduct);
-
-router.patch(
-    "/:id/minimum-stock",
-    authenticateToken,
-    adminOnly,
-    updateMinimumStock
-);
-
-export default router;
-</file>
-
 <file path="frontend/react-app/src/pages/Dashboard.tsx">
 import { useEffect, useState } from "react";
 import { DollarSign, Package, CheckSquare, AlertTriangle } from "lucide-react";
@@ -9082,10 +9048,7 @@ const formatTime = (dateString: string) => {
 };
 
 // Mock Method (since DB doesn't have it)
-const getMockMethod = (id: number) => {
-  const methods = ["Cash", "GCash", "Card"];
-  return methods[id % 3];
-};
+
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -9114,7 +9077,7 @@ export default function Dashboard() {
 
         if (!dashboardRes.ok) throw new Error("Failed to load dashboard stats.");
         const data: DashboardApiResponse = await dashboardRes.json();
-        
+
         setStats({
           salesToday: Number(data.today_sales), salesChangePct: null,
           totalProducts: Number(data.total_products), addedThisWeek: null,
@@ -9166,7 +9129,7 @@ export default function Dashboard() {
 
       {/* Bottom Section: Tables */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        
+
         {/* Recent Transactions (Figma Structure) */}
         <div className="lg:col-span-2 rounded-[10px] border border-[#e9ecef] bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
@@ -9176,7 +9139,7 @@ export default function Dashboard() {
             </div>
             <Link to="/sales" className="text-xs font-medium text-[#0d6efd] hover:underline">View All</Link>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead>
@@ -9195,7 +9158,7 @@ export default function Dashboard() {
                   <tr><td colSpan={7} className="py-4 text-center text-gray-400">No transactions found.</td></tr>
                 ) : (
                   recentTransactions.map((txn) => {
-                    const method = getMockMethod(txn.sale_id);
+                    const method = "Cash";
                     return (
                       <tr key={txn.sale_id} className="border-b border-[#f8f9fa] last:border-0 hover:bg-gray-50">
                         <td className="py-3 text-[12px] font-bold text-[#0d6efd]">TXN-{txn.sale_id}</td>
@@ -9203,12 +9166,10 @@ export default function Dashboard() {
                         <td className="py-3 text-[12px] text-[#495057]">{txn.sold_by}</td>
                         <td className="py-3 text-[12px] text-center text-[#495057]">{txn.total_items}</td>
                         <td className="py-3 text-[12px] text-right font-semibold text-[#212529]">
-                          RS {Number(txn.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                          RS {Number(txn.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 text-center">
-                          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-semibold 
-                            ${method === 'Cash' ? 'bg-gray-100 text-gray-700' : 
-                              method === 'GCash' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                          <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
                             {method}
                           </span>
                         </td>
@@ -9250,278 +9211,13 @@ export default function Dashboard() {
               ))
             )}
           </div>
-          
-          <div className="mt-4 text-right">
-             <Link to="/low-stock" className="text-xs font-medium text-[#0d6efd] hover:underline">View All Alerts</Link>
-          </div>
         </div>
 
       </div>
+
     </div>
   );
 }
-</file>
-
-<file path="frontend/react-app/src/pages/ProductsPage.tsx">
-import { useCallback, useEffect, useState } from 'react'
-import ProductCatalogView from '../components/products/ProductCatalogView'
-import ProductForm, {
-  type ProductFormData,
-} from '../components/products/ProductForm'
-import DeleteConfirmationDialog from '../components/products/DeleteConfirmationDialog'
-import type { Product } from '../types/product'
-import SearchBar from '../components/SearchBar'
-import { useCategories } from '../context/CategoryContext'
-import { isLowStock } from '../utils/stock'
-
-const API_URL = 'http://localhost:3000/api'
-
-interface ApiProduct {
-  id: number
-  name: string
-  category: string | null
-  price: number | string
-  stock_quantity: number | string
-  minimum_stock: number | string
-}
-
-async function request(path: string, options: RequestInit = {}) {
-  const token = localStorage.getItem('token')
-
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-  })
-
-  const data = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(data.message || 'Request failed')
-  }
-
-  return data
-}
-
-function toProduct(item: ApiProduct): Product {
-  return {
-    id: item.id,
-    name: item.name,
-    categoryName: item.category ?? '',
-    price: Number(item.price),
-    currentStock: Number(item.stock_quantity),
-    minStockLevel: Number(item.minimum_stock),
-    unit: 'pcs', // The database does not store a unit yet
-  }
-}
-
-function ProductsPage() {
-  const { categories, categoryItems, refreshCategories } = useCategories()
-  const [products, setProducts] = useState<Product[]>([])
-  const [loadError, setLoadError] = useState('')
-  const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('All')
-  const [showForm, setShowForm] = useState(false)
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null)
-
-  const loadProducts = useCallback(async () => {
-    const data: ApiProduct[] = await request('/products')
-    setProducts(data.map(toProduct))
-    setLoadError('')
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-
-    request('/products')
-      .then((data: ApiProduct[]) => {
-        if (cancelled) return
-        setProducts(data.map(toProduct))
-        setLoadError('')
-      })
-      .catch((error) => {
-        if (cancelled) return
-        setLoadError(
-          error instanceof Error ? error.message : 'Could not load products.',
-        )
-      })
-
-    void refreshCategories()
-
-    return () => {
-      cancelled = true
-    }
-  }, [refreshCategories])
-
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch = product.name
-      .toLowerCase()
-      .includes(search.trim().toLowerCase())
-
-    const matchesCategory =
-      categoryFilter === 'All' || product.categoryName === categoryFilter
-
-    return matchesSearch && matchesCategory
-  })
-
-  const lowStockCount = products.filter(isLowStock).length
-
-  const emptyMessage = loadError
-    ? loadError
-    : products.length === 0
-      ? 'No products have been added yet.'
-      : 'No products match your search.'
-
-  function closeForm() {
-    setShowForm(false)
-    setEditingProduct(null)
-  }
-
-  async function handleSave(data: ProductFormData) {
-    const category = categoryItems.find((item) => item.name === data.category)
-
-    if (!category) {
-      throw new Error('Category not found')
-    }
-
-    if (editingProduct) {
-      // 1. Update the basic product details first
-      await request(`/products/${editingProduct.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          name: data.name,
-          category_id: category.id,
-          price: data.price,
-          minimum_stock: data.minimumStock,
-        }),
-      })
-
-      // 2. Check if stock was changed
-      if (data.currentStock !== editingProduct.currentStock) {
-        const difference = data.currentStock - editingProduct.currentStock;
-        
-        if (difference > 0) {
-          // If adding stock, use the RESTOCK API (this prevents the backend error)
-          await request(`/inventory/${editingProduct.id}/restock`, {
-            method: 'POST',
-            body: JSON.stringify({ quantity: difference }),
-          });
-        } else {
-          // If reducing stock, use the PUT API
-          await request(`/inventory/${editingProduct.id}`, {
-            method: 'PUT',
-            body: JSON.stringify({ quantity: data.currentStock }),
-          });
-        }
-      }
-    } else {
-      await request('/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: data.name,
-          category_id: category.id,
-          price: data.price,
-          stock_quantity: data.currentStock,
-          minimum_stock: data.minimumStock,
-        }),
-      })
-    }
-
-    await loadProducts()
-    closeForm()
-  }
-
-  async function handleConfirmDelete(productId: number) {
-    await request(`/products/${productId}`, { method: 'DELETE' })
-    await loadProducts()
-    setDeletingProduct(null)
-  }
-
-  return (
-    <div>
-      <ProductCatalogView
-        products={filteredProducts}
-        totalCount={products.length}
-        lowStockCount={lowStockCount}
-        emptyMessage={emptyMessage}
-        toolbar={
-          <div className="flex items-center gap-3 rounded-[10px] border border-[#e9ecef] bg-white p-3.5">
-            <div className="flex-1">
-              <SearchBar
-                value={search}
-                onChange={setSearch}
-                placeholder="Search products..."
-              />
-            </div>
-
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              aria-label="Filter by category"
-              className="h-[38px] w-[150px] shrink-0 cursor-pointer rounded-md border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            >
-              <option value="All">All</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          </div>
-        }
-        onAdd={() => {
-          setEditingProduct(null)
-          setShowForm(true)
-        }}
-        onEdit={(product) => {
-          setEditingProduct(product)
-          setShowForm(true)
-        }}
-        onDelete={(product) => setDeletingProduct(product)}
-      />
-
-      {showForm && (
-        <div
-          className="product-modal-overlay"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeForm()
-          }}
-        >
-          <ProductForm
-            key={editingProduct?.id ?? 'new-product'}
-            initialValues={
-              editingProduct
-                ? {
-                    name: editingProduct.name,
-                    category: editingProduct.categoryName,
-                    unit: editingProduct.unit ?? 'pcs',
-                    price: editingProduct.price,
-                    currentStock: editingProduct.currentStock,
-                    minimumStock: editingProduct.minStockLevel,
-                  }
-                : undefined
-            }
-            onSave={handleSave}
-            onCancel={closeForm}
-          />
-        </div>
-      )}
-
-      {deletingProduct && (
-        <DeleteConfirmationDialog
-          productName={deletingProduct.name}
-          onConfirm={() => handleConfirmDelete(deletingProduct.id)}
-          onCancel={() => setDeletingProduct(null)}
-        />
-      )}
-    </div>
-  )
-}
-
-export default ProductsPage
 </file>
 
 <file path="frontend/react-app/src/App.tsx">
@@ -9536,7 +9232,6 @@ import Login from './pages/Login'
 import NotFound from './pages/NotFound'
 import CategoryManagement from './pages/CategoryManagement'
 import InventoryList from './components/InventoryList'
-import LowStockAlerts from './pages/LowStockAlerts'
 
 
 function ProtectedRoute() {
@@ -9558,7 +9253,6 @@ function App() {
         <Route path="/sales" element={<SalesPage />} />
         <Route path="/staff" element={<StaffManagement />} />
         <Route path="/products" element={<ProductManagement />} />
-        <Route path="/low-stock" element={<LowStockAlerts />} />
                 <Route
           path="/categories"
           element={
@@ -9634,6 +9328,7 @@ export const searchProducts = async (req: Request, res: Response) => {
             LEFT JOIN categories c
                 ON p.category_id = c.category_id
             WHERE p.product_name LIKE ?
+            AND p.is_active = 1
         `, [search]);
         res.json(products);
     } catch (error) {
@@ -9660,6 +9355,7 @@ export const getProductById = async (req: Request, res: Response) => {
             LEFT JOIN categories c
                 ON p.category_id = c.category_id
             WHERE p.product_id = ?
+            AND WHERE p.is_active = 1 
         `, [req.params.id]);
 
         if (products.length === 0) {
@@ -9805,7 +9501,7 @@ export const updateMinimumStock = async (req: Request, res: Response) => {
 export const deleteProduct = async (req: Request, res: Response) => {
     try {
         const [result] = await db.execute<any>(
-            "DELETE FROM products WHERE product_id = ?",
+            "UPDATE products SET is_active = 0 WHERE product_id = ?",
             [req.params.id]
         );
 
@@ -9813,17 +9509,17 @@ export const deleteProduct = async (req: Request, res: Response) => {
             return res.status(404).json({ message: "Product not found" });
         }
 
-        return res.json({ message: "Product deleted successfully" });
+        return res.json({ message: "Product hidden successfully" });
     } catch (error: any) {
         // Foreign key constraint error එක අල්ලගන්නවා (MySQL Error 1451)
         if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.errno === 1451) {
             return res.status(409).json({
-                message: "Cannot delete this product because it has existing sales records or stock history."
+                message: "Cannot hide this product because it has existing sales records or stock history."
             });
         }
 
         return res.status(500).json({
-            message: "Failed to delete product",
+            message: "Failed to hide product",
             error: error.message
         });
     }
