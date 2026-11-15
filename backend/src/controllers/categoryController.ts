@@ -7,8 +7,9 @@ export const getCategories = async (req: Request, res: Response) => {
     try {
 
         const [categories] = await db.execute<any>(
-            "SELECT category_id AS id, category_name AS name FROM categories WHERE is_active = 1 ORDER BY category_id DESC"
-        );
+    "SELECT category_id AS id, category_name AS name FROM categories WHERE category_id = ? AND is_active = 1",
+    [req.params.id]
+);
 
         res.json(categories);
 
