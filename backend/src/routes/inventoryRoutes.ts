@@ -60,7 +60,7 @@ router.get("/", authenticateToken, async (req, res) => {
 // ==========================================
 // UPDATE STOCK (SET EXACT QUANTITY)
 // ==========================================
-router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
+router.put("/:id", authenticateToken, async (req, res) => {
     try {
         const { quantity } = req.body;
         const productId = Number(req.params.id);
@@ -115,7 +115,7 @@ router.put("/:id", authenticateToken, adminOnly, async (req, res) => {
 // ==========================================
 // RESTOCK PRODUCT (ADD QUANTITY)
 // ==========================================
-router.post("/:id/restock", authenticateToken, adminOnly, async (req, res) => {
+router.post("/:id/restock", authenticateToken, async (req, res) => {
     const productId = Number(req.params.id);
     const { quantity } = req.body;
 
