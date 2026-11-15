@@ -62,10 +62,7 @@ const formatTime = (dateString: string) => {
 };
 
 // Mock Method (since DB doesn't have it)
-const getMockMethod = (id: number) => {
-  const methods = ["Cash", "GCash", "Card"];
-  return methods[id % 3];
-};
+
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -94,7 +91,7 @@ export default function Dashboard() {
 
         if (!dashboardRes.ok) throw new Error("Failed to load dashboard stats.");
         const data: DashboardApiResponse = await dashboardRes.json();
-        
+
         setStats({
           salesToday: Number(data.today_sales), salesChangePct: null,
           totalProducts: Number(data.total_products), addedThisWeek: null,
@@ -146,7 +143,7 @@ export default function Dashboard() {
 
       {/* Bottom Section: Tables */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        
+
         {/* Recent Transactions (Figma Structure) */}
         <div className="lg:col-span-2 rounded-[10px] border border-[#e9ecef] bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
@@ -156,7 +153,7 @@ export default function Dashboard() {
             </div>
             <Link to="/sales" className="text-xs font-medium text-[#0d6efd] hover:underline">View All</Link>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
               <thead>
@@ -175,7 +172,7 @@ export default function Dashboard() {
                   <tr><td colSpan={7} className="py-4 text-center text-gray-400">No transactions found.</td></tr>
                 ) : (
                   recentTransactions.map((txn) => {
-                    const method = getMockMethod(txn.sale_id);
+                    const method = "Cash";
                     return (
                       <tr key={txn.sale_id} className="border-b border-[#f8f9fa] last:border-0 hover:bg-gray-50">
                         <td className="py-3 text-[12px] font-bold text-[#0d6efd]">TXN-{txn.sale_id}</td>
@@ -183,12 +180,10 @@ export default function Dashboard() {
                         <td className="py-3 text-[12px] text-[#495057]">{txn.sold_by}</td>
                         <td className="py-3 text-[12px] text-center text-[#495057]">{txn.total_items}</td>
                         <td className="py-3 text-[12px] text-right font-semibold text-[#212529]">
-                          RS {Number(txn.total_amount).toLocaleString('en-US', {minimumFractionDigits: 2})}
+                          RS {Number(txn.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </td>
                         <td className="py-3 text-center">
-                          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-semibold 
-                            ${method === 'Cash' ? 'bg-gray-100 text-gray-700' : 
-                              method === 'GCash' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                          <span className="inline-block rounded bg-gray-100 px-2 py-0.5 text-[10px] font-semibold text-gray-700">
                             {method}
                           </span>
                         </td>
@@ -230,13 +225,10 @@ export default function Dashboard() {
               ))
             )}
           </div>
-          
-          <div className="mt-4 text-right">
-             <Link to="/low-stock" className="text-xs font-medium text-[#0d6efd] hover:underline">View All Alerts</Link>
-          </div>
         </div>
 
       </div>
+
     </div>
   );
 }
